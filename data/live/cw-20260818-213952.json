@@ -1,0 +1,21 @@
+{
+  "audio_hz": 709.0,
+  "db": 39.6,
+  "snr": 13.6,
+  "wpm": 24.2,
+  "ratio": 3.51,
+  "chars": 31,
+  "sample": "QU W1AWC7 QQQN KK6IK 5NN IX CNXKK6E ",
+  "read_by": "neural",
+  "dial": 14050000,
+  "band": "",
+  "rbn_dx": "W1AW/7",
+  "measured_wpm": 24.6,
+  "envelope_snr": 13.3,
+  "recorded": "2026-08-18T21:39:52.934787+00:00",
+  "pitch_hz": 699.7,
+  "classic": "E II E V?W/7     E  KK6IK 5NN ID   E E   E E  6C5IE I S EE E",
+  "neural": "QES W1AW97  KKK6IK 5NN ID ANCDDKK6EIF KK",
+  "agreement": 0.367,
+  "guess": "E II E V?W/7 E KK6IK 5NN ID E E E E 6C5IE I S EE E"
+}

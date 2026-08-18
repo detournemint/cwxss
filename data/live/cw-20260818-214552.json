@@ -1,0 +1,21 @@
+{
+  "audio_hz": 699.2,
+  "db": 52.2,
+  "snr": 15.1,
+  "wpm": 22.8,
+  "ratio": 3.14,
+  "chars": 22,
+  "sample": "AWC7 QC CQ W1AWY7QD CQ 250 WAS W1AW6",
+  "read_by": "neural",
+  "dial": 14050000,
+  "band": "",
+  "rbn_dx": "W1AW/7",
+  "measured_wpm": 23.0,
+  "envelope_snr": 14.5,
+  "recorded": "2026-08-18T21:45:52.385055+00:00",
+  "pitch_hz": 699.7,
+  "classic": "?UV??  ?= L?S?? IEI /Q 250 WAS W1AW/7 CQ WJ",
+  "neural": "AWC7 C ACQ P1AWY7E CQ 250 WAS W1AWC7 NCQ WJ",
+  "agreement": 0.535,
+  "guess": "SUNNY ?= LEFT IEI /Q 250 WAS W1AW/7 CQ WJ"
+}
