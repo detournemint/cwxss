@@ -125,7 +125,7 @@ def check_receiver(log):
         log("  antenna is connected; leaving the preamp on")
 
 
-def sweep(band, device, dwell, log):
+def sweep(band, device, dwell, log, net=None):
     """Step across a band's CW segment, returning what was found where."""
     if band in CHANNELS:
         freqs = list(CHANNELS[band])
@@ -142,12 +142,13 @@ def sweep(band, device, dwell, log):
         if not record(dwell, device, tmp):
             continue
         audio = read_wav(tmp)
-        for sig in dsp.find_cw_signals(audio, RATE):
+        for sig in dsp.find_cw_signals(audio, RATE, net=net):
             sig["dial"] = freq
             sig["band"] = band + "m"
             found.append(sig)
             log(f"    {freq/1e6:.4f} +{sig['audio_hz']:.0f}Hz  "
-                f"snr {sig['snr']:.0f}  {sig['wpm']:.0f} wpm  {sig['sample'][:28]!r}")
+                f"snr {sig['snr']:.0f}  {sig['wpm']:.0f} wpm  "
+                f"[{sig.get('read_by','?')}]  {sig['sample'][:28]!r}")
     return sorted(found, key=lambda s: -s["snr"])
 
 
@@ -215,7 +216,7 @@ async def main():
                     break
                 rig("M CW 3000")
                 log(f"  sweeping {band}m")
-                hits = sweep(band, a.device, a.dwell, log)
+                hits = sweep(band, a.device, a.dwell, log, net=model)
                 if not hits:
                     log(f"  {band}m: nothing")
                     continue

@@ -257,6 +257,57 @@ class DecoderChoice(unittest.TestCase):
         self.assertEqual(classic.gap_stretch([(True, 5)], 0), 0.0)
 
 
+class SignalFinding(unittest.TestCase):
+    """Which decoder gets a vote on whether a signal exists."""
+
+    class FakeNet:
+        available = True
+
+        def __init__(self, text=""):
+            self.text = text
+
+        def decode(self, env, *a, **kw):
+            return self.text
+
+    def clip(self):
+        return synth.render("CQ POTA DE K6XSS K TEST DE W1AW QRZ", wpm=18,
+                            pitch=640, snr_db=14, seed=4)
+
+    def test_noise_is_rejected_even_with_a_model_voting(self):
+        """Giving a second decoder a vote must not reintroduce the forty
+        phantom signals a band sweep once reported."""
+        rng = np.random.default_rng(3)
+        for rms in (0.03, 0.10, 0.20):
+            a = (rng.standard_normal(8000 * 20) * rms).astype(np.float32)
+            self.assertEqual(
+                dsp.find_cw_signals(a, 8000, net=self.FakeNet("")), [])
+
+    def test_a_model_that_reads_it_is_enough(self):
+        """A station on 14049.5, spotted by two RBN receivers forty miles
+        away, arrived 47 dB over the floor and was discarded because the
+        classic decoder made noise of it while the model read a CQ and two
+        callsigns. Either decoder reading language is enough."""
+        found = dsp.find_cw_signals(
+            self.clip(), dsp.DEFAULT_RATE,
+            net=self.FakeNet("CQ DE K6XSS K TEST DE W1AW"))
+        self.assertTrue(found)
+
+    def test_it_still_works_with_no_model_at_all(self):
+        """The model is optional; a station running without it must still get
+        a band scan."""
+        self.assertTrue(dsp.find_cw_signals(self.clip(), dsp.DEFAULT_RATE))
+
+    def test_a_babbling_model_cannot_invent_a_signal(self):
+        """The timing gates run before either language test, so a model
+        emitting plausible text over noise still cannot conjure a station."""
+        rng = np.random.default_rng(9)
+        a = (rng.standard_normal(8000 * 20) * 0.05).astype(np.float32)
+        self.assertEqual(
+            dsp.find_cw_signals(a, 8000,
+                                net=self.FakeNet("CQ DE W1AW K TEST QRZ ES")),
+            [])
+
+
 class SelfTraining(unittest.TestCase):
     """Pseudo-labels are only worth having if they are right."""
 

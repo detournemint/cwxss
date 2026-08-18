@@ -161,7 +161,8 @@ def _reads_like_cw(text):
 
 
 def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
-                    min_db=16.0, min_wpm=8.0, max_wpm=40.0, min_chars=8):
+                    min_db=16.0, min_wpm=8.0, max_wpm=40.0, min_chars=8,
+                    net=None):
     """Every CW signal in the passband, with how confident we are in each.
 
     With a wide filter one capture covers the whole passband, so a band scan can
@@ -175,6 +176,19 @@ def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
     is a station. Anything else is a carrier, a birdie, or noise. Reusing the
     decoder also means the speed reported here is measured the same way as the
     speed reported everywhere else, rather than by a second, worse method.
+
+    Pass `net` and both decoders get a vote. This matters more than it sounds.
+    A station heard on 14049.5, which the Reverse Beacon Network was spotting
+    from two receivers forty miles away, arrived here as a clean tone 47 dB over
+    the noise floor and was thrown away. Every timing test passed. The classic
+    decoder made 'E SII T? E E B? ILF E ?I SK TN' of it and the language test
+    correctly refused that; the model read the same audio as 'CO DBK RR DK
+    G5AQV KL5NQ', which is a CQ and two callsigns.
+
+    Gating on the classic decoder alone means a harvester whose entire purpose
+    is to collect training audio for the model discards exactly the signals only
+    the model can read -- the ones worth having. Either decoder producing
+    language is enough.
     """
     import classic
     if len(audio) < rate:
@@ -212,6 +226,12 @@ def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
         text, info = classic.decode(norm)
         wpm, ratio = info.get("wpm"), info.get("ratio")
         letters = sum(c.isalnum() for c in text)
+        ntext = ""
+        if net is not None and getattr(net, "available", False):
+            try:
+                ntext = net.decode(norm) or ""
+            except Exception:
+                ntext = ""
         if not wpm or not ratio:
             continue
         if not (min_wpm <= wpm <= max_wpm):
@@ -220,12 +240,19 @@ def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
             continue
         if letters < min_chars:
             continue
-        if not _reads_like_cw(text):
+        classic_ok = _reads_like_cw(text)
+        neural_ok = bool(ntext) and _reads_like_cw(ntext)
+        if not (classic_ok or neural_ok):
             continue
         taken.append(hz)
         found.append({
             "audio_hz": round(hz, 1), "db": round(db, 1), "snr": round(snr, 1),
             "wpm": round(wpm, 1), "ratio": round(ratio, 2),
-            "chars": letters, "sample": text[:36],
+            "chars": letters,
+            # Show whichever decoder actually read it, so the log says what is
+            # on the air rather than what the weaker decoder made of it.
+            "sample": (ntext if neural_ok else text)[:36],
+            "read_by": "neural" if neural_ok and not classic_ok
+                       else "both" if neural_ok and classic_ok else "classic",
         })
     return sorted(found, key=lambda s: -s["snr"])
