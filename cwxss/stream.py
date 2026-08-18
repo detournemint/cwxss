@@ -11,6 +11,8 @@ printing "N" and then having to take it back when the next dit arrives and makes
 it "K". Text is committed a short way behind the live edge, which is exactly how
 a human operator reads: slightly behind, and right.
 """
+import time
+
 import numpy as np
 
 import classic
@@ -19,6 +21,11 @@ import guess
 import neural
 
 WINDOW_S = 12.0            # how much history to keep and re-read
+# Silence long enough to count as the end of an over. Shorter than the gap
+# between overs in a QSO, longer than the gap between words at 8 wpm.
+BLOCK_BREAK_S = 20.0
+HISTORY_BLOCKS = 600       # blocks kept in memory
+HISTORY_VIEW = 40          # blocks sent with each update
 COMMIT_LAG_S = 1.2         # how far behind the edge text is treated as settled
 
 # A threshold detector always finds something. Point it at an empty band and it
@@ -59,6 +66,15 @@ class StreamDecoder:
         self.pitch_hist_s = 3.0
         self.pitch = None
         self.committed = ""
+        # A timestamped transcript, kept as blocks rather than one string.
+        #
+        # From a net control operator explaining why he runs a decoder at all:
+        # he copies by ear and uses the screen to look *back* when a word gets
+        # away from him. A rolling 4000-character string cannot answer "what did
+        # he send five minutes ago", which for someone working a roster is the
+        # entire point. Blocks break on silence, so the transcript reads as
+        # separate overs rather than one unbroken wall.
+        self.history = []
         self.pending = ""
         self.info = {}
         # Absolute position of the oldest frame still in the window, and how far
@@ -170,8 +186,27 @@ class StreamDecoder:
         if fresh:
             self.read_to = max(st for _, st, _ in fresh)
             self.committed = (self.committed + added)[-4000:]
+            self._record(added)
         self.pending = "".join(c for c, _, end in chars if end > edge).strip()
         return added
+
+    def _record(self, added):
+        """File newly committed text under a timestamp."""
+        now = time.time()
+        if self.history and now - self.history[-1]["last"] < BLOCK_BREAK_S:
+            self.history[-1]["text"] += added
+            self.history[-1]["last"] = now
+        else:
+            self.history.append({"at": now, "last": now, "text": added})
+            del self.history[:-HISTORY_BLOCKS]
+
+    def transcript(self):
+        """The whole session, timestamped, as plain text."""
+        out = []
+        for b in self.history:
+            stamp = time.strftime("%H:%M:%S", time.gmtime(b["at"]))
+            out.append(f"{stamp}Z  {b['text'].strip()}")
+        return "\n".join(out)
 
     def _why_quiet(self, info, chars):
         """Empty when the signal is worth decoding, otherwise the reason not to."""
@@ -209,6 +244,10 @@ class StreamDecoder:
             "snr": round(dsp.snr_estimate(self.env), 1) if self.env.size else 0.0,
             "envelope": [round(float(v), 3) for v in norm[-600:]],
             "text": self.committed[-2000:],
+            # Recent blocks only; the full session is at /transcript, so a long
+            # net does not push a megabyte through the socket every update.
+            "history": [{"at": int(b["at"]), "text": b["text"]}
+                        for b in self.history[-HISTORY_VIEW:]],
             "pending": self.pending,
             "guessed": [{"w": w, "m": m} for w, m in zip(toks, marks)],
             "quiet": self.quiet,

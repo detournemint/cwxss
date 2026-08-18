@@ -21,6 +21,93 @@ BANDS = [(1800, 2000, "160m"), (3500, 4000, "80m"), (5250, 5450, "60m"),
 CALL_RE = re.compile(r"^[A-Z0-9]{1,3}\d[A-Z]{1,4}(/[A-Z0-9]{1,4})?$")
 
 
+# POTA references are a prefix, a dash and four or five digits: K-1234 in the
+# US, VE-5082 in Canada, GB-0001 and so on.
+PARK = re.compile(r"\b([A-Z0-9]{1,2}-\d{4,5})\b")
+RST = re.compile(r"\b([1-5][1-9NA][1-9NA])\b")
+STATE = re.compile(r"\b(A[KLRZ]|C[AOT]|D[CE]|FL|GA|HI|I[ADLN]|K[SY]|LA|"
+                   r"M[ADEINOST]|N[CDEHJMVY]|O[HKR]|PA|RI|S[CD]|T[NX]|UT|"
+                   r"V[AT]|W[AIVY])\b")
+CALL = re.compile(r"\b([A-Z0-9]{1,3}\d[A-Z]{1,4}(?:/[A-Z0-9]{1,3})?)\b")
+
+
+def read_exchange(text, my_call="", their_call=""):
+    """Pull a contact out of decoded CW.
+
+    A park activation is ten contacts and every one of them has to be typed
+    while the next station is already calling. The exchange is short and highly
+    conventional, so most of it can be read straight off the transcript:
+
+        K6XSS DE W1ABC BK
+        W1ABC 599 CA
+        R 599 TX TU
+        K-1234
+
+    Returns what could be found and how sure it is, rather than guessing.
+    Nothing here logs anything: a wrong callsign in a POTA upload is worse than
+    a missing one, so the caller decides what to do with a low score.
+
+    Callsigns are taken by consensus. Off-air CW mangles them -- KK6IK arrives
+    as KKK6IK -- but a station sends its own call several times in an exchange,
+    and the variants disagree in different places. `guess.resolve_callsigns`
+    already does that work.
+    """
+    import guess
+    up = (text or "").upper()
+    mine = (my_call or "").upper()
+    tokens = up.split()
+
+    fixed = guess.resolve_callsigns(tokens)
+    tokens = [fixed.get(t, t) for t in tokens]
+
+    calls = []
+    for t in tokens:
+        m = CALL.fullmatch(t.strip(".,?=/+-") if "/" not in t else t)
+        if not m:
+            continue
+        c = m.group(1)
+        if mine and (c == mine or c.startswith(mine + "/")):
+            continue        # our own call is not the contact
+        calls.append(c)
+
+    call = (their_call or "").upper()
+    score = 1.0 if call else 0.0
+    if not call and calls:
+        # The station worked is the callsign that appears most; ties go to the
+        # later one, because a QSO ends with the other operator's call.
+        counts = {}
+        for i, c in enumerate(calls):
+            counts[c] = counts.get(c, (0, 0))
+            counts[c] = (counts[c][0] + 1, i)
+        call, (n, _) = max(counts.items(), key=lambda kv: (kv[1][0], kv[1][1]))
+        score = min(1.0, n / 2.0)      # seen twice or more is a good sign
+
+    park = PARK.search(up)
+    rst = RST.findall(up)
+
+    # The state is taken only where the exchange puts it -- straight after the
+    # report, "599 CA" -- and never by scanning the text for anything that
+    # looks like one. Half the state abbreviations are ordinary CW: DE means
+    # "from" and would otherwise log every contact as Delaware, HI is laughter,
+    # IN OR ME OH are words, AR and SK are prosigns. Position disambiguates
+    # them; spelling cannot.
+    state = ""
+    for i, t in enumerate(tokens[:-1]):
+        if RST.fullmatch(t.strip(".,")):
+            nxt = tokens[i + 1].strip(".,")
+            if STATE.fullmatch(nxt):
+                state = nxt
+    return {
+        "call": call,
+        "rst_rcvd": (rst[-1].replace("N", "9").replace("A", "1")
+                     if rst else "599"),
+        "their_park": park.group(1) if park else "",
+        "state": state,
+        "confidence": round(score, 2),
+        "candidates": sorted(set(calls)),
+    }
+
+
 def band_of(hz):
     khz = (hz or 0) / 1000.0
     for lo, hi, name in BANDS:

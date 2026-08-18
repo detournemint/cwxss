@@ -464,6 +464,83 @@ class Guessing(unittest.TestCase):
         self.assertEqual(got.count("W1ABC"), 3)
 
 
+class AutoLog(unittest.TestCase):
+    """Reading a contact out of decoded CW.
+
+    Ten contacts make a park activation and each one has to be entered while
+    the next station is already calling, so this reads the exchange off the
+    transcript instead.
+    """
+
+    def read(self, text, mine="K6XSS"):
+        return qsolog.read_exchange(text, my_call=mine)
+
+    def test_a_clean_exchange(self):
+        r = self.read("K6XSS DE N0ABC N0ABC 579 MN TU 73")
+        self.assertEqual(r["call"], "N0ABC")
+        self.assertEqual(r["rst_rcvd"], "579")
+        self.assertEqual(r["state"], "MN")
+
+    def test_our_own_call_is_not_the_contact(self):
+        """We send our own callsign more than anyone else does."""
+        r = self.read("CQ POTA DE K6XSS K6XSS K6XSS K DE W1ABC W1ABC")
+        self.assertEqual(r["call"], "W1ABC")
+
+    def test_nothing_worked_is_refused(self):
+        """Calling CQ into an empty band must not produce a log entry."""
+        self.assertEqual(self.read("CQ CQ CQ DE K6XSS K6XSS K")["call"], "")
+
+    def test_de_is_not_delaware(self):
+        """Half the state abbreviations are ordinary CW. DE means 'from' and
+        would otherwise land in the state field of every contact ever logged;
+        HI is laughter, IN OR ME OH are words, AR and SK are prosigns."""
+        self.assertEqual(self.read("K6XSS DE W1ABC BK")["state"], "")
+
+    def test_the_state_is_taken_from_the_exchange_position(self):
+        """Their state follows their report, which is what distinguishes it
+        from the same two letters appearing anywhere else."""
+        r = self.read("W1ABC 599 CA R 599 TX TU")
+        self.assertEqual(r["state"], "TX")
+
+    def test_park_to_park(self):
+        r = self.read("K6XSS DE KK6IK 599 CA K-1234 TU")
+        self.assertEqual(r["their_park"], "K-1234")
+
+    def test_5nn_is_599(self):
+        """Nobody sends 599 at speed; they send 5NN."""
+        self.assertEqual(self.read("K6XSS DE W1ABC 5NN TU")["rst_rcvd"], "599")
+
+    def test_hearing_a_call_once_is_flagged(self):
+        """Logged anyway -- a missed contact cannot be recovered and Undo is
+        one click -- but the operator is told to check it."""
+        self.assertLess(self.read("K6XSS DE W1ABC BK")["confidence"], 1.0)
+        self.assertEqual(
+            self.read("K6XSS DE W1ABC W1ABC 599 TU")["confidence"], 1.0)
+
+
+class Transcript(unittest.TestCase):
+    """Looking back at what was sent five minutes ago."""
+
+    def test_blocks_break_on_silence(self):
+        d = stream.StreamDecoder(model="models/cw.onnx")
+        d._record("CQ DE K6XSS")
+        d.history[-1]["last"] -= stream.BLOCK_BREAK_S + 1
+        d._record("K6XSS DE W1ABC")
+        self.assertEqual(len(d.history), 2)
+
+    def test_continuous_sending_stays_one_block(self):
+        d = stream.StreamDecoder(model="models/cw.onnx")
+        d._record("CQ ")
+        d._record("DE K6XSS")
+        self.assertEqual(len(d.history), 1)
+        self.assertEqual(d.history[0]["text"], "CQ DE K6XSS")
+
+    def test_the_transcript_is_timestamped(self):
+        d = stream.StreamDecoder(model="models/cw.onnx")
+        d._record("CQ DE K6XSS")
+        self.assertRegex(d.transcript(), r"^\d\d:\d\d:\d\dZ  CQ DE K6XSS")
+
+
 class Macros(unittest.TestCase):
     def test_both_sets_exist_and_differ(self):
         cfg = config.load()

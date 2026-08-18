@@ -1,0 +1,7 @@
+[Unit]
+Description=Harvest CW during a scheduled activity window
+
+[Service]
+Type=oneshot
+TimeoutStartSec=5400
+ExecStart=%h/cwxss/scripts/harvest-window.sh 60

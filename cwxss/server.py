@@ -11,6 +11,7 @@ import asyncio
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -348,12 +349,79 @@ async def ws_handler(req):
                 if ST.keyer:
                     await ST.keyer.speed(ST.wpm)
                 await ST.broadcast("wpm", {"wpm": ST.wpm})
+            elif act == "autolog":
+                # Read the contact out of the transcript instead of typing it
+                # while the next station is already calling. Ten contacts make
+                # an activation and every one has to be entered between overs.
+                recent = ST.decoder.committed[-400:]
+                ex = qsolog.read_exchange(
+                    recent, my_call=ST.cfg.get("call", ""), their_call=ST.his)
+                if not ex["call"]:
+                    await ws.send_str(json.dumps({"type": "ack", "data": {
+                        "action": "autolog", "ok": False,
+                        "who": "no callsign in the last few overs"}}))
+                elif not qsolog.valid_call(ex["call"]):
+                    await ws.send_str(json.dumps({"type": "ack", "data": {
+                        "action": "autolog", "ok": False,
+                        "who": f"{ex['call']} is not a callsign"}}))
+                else:
+                    freq = None
+                    f = await rig_cmd_bound("f")
+                    try:
+                        freq = int(f)
+                    except (TypeError, ValueError):
+                        pass
+                    q, err = ST.log.add(
+                        ex["call"], freq_hz=freq,
+                        rst_sent=ST.cfg.get("rst", "599"),
+                        rst_rcvd=ex["rst_rcvd"],
+                        wpm=ST.decoder.info.get("wpm"),
+                        their_park=ex["their_park"],
+                        my_park=ST.cfg.get("park", ""),
+                        state=ex["state"])
+                    if q:
+                        ST.his = ""
+                        await ST.broadcast("his", {"call": ""})
+                        await ST.broadcast("log", {
+                            "summary": ST.log.summary(),
+                            "recent": ST.log.today()[-12:][::-1]})
+                    n = ST.log.summary()
+                    bits = [f"logged {ex['call']}"]
+                    if ex["their_park"]:
+                        bits.append(f"P2P {ex['their_park']}")
+                    if ex["confidence"] < 1.0:
+                        # Heard once. Logged anyway, because the operator can
+                        # undo in one click and a missed contact cannot be
+                        # recovered, but said out loud so it gets checked.
+                        bits.append("heard once \u2014 check it")
+                    bits.append(f"{n['today']} today")
+                    if not n["activated"]:
+                        bits.append(f"{n['needed']} more to activate")
+                    await ws.send_str(json.dumps({"type": "ack", "data": {
+                        "action": "autolog", "ok": bool(q),
+                        "who": err or ", ".join(bits)}}))
             elif act == "clear":
                 ST.decoder.committed = ""
+                ST.decoder.history = []
                 await ST.broadcast("decode", ST.decoder.state())
     finally:
         ST.clients.discard(ws)
     return ws
+
+
+async def transcript(request):
+    """The whole session as timestamped text.
+
+    The live view carries only the recent blocks so a long net does not push a
+    megabyte through the socket on every update. This is the rest of it.
+    """
+    body = ST.decoder.transcript() or "nothing decoded yet"
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    return web.Response(
+        text=body + "\n", content_type="text/plain",
+        headers={"Content-Disposition":
+                 f'attachment; filename="cw-{stamp}.txt"',
+                 "Cache-Control": "no-store"})
 
 
 def build_id():
@@ -456,6 +524,7 @@ async def main():
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/adif", adif)
+    app.router.add_get("/transcript", transcript)
     app.router.add_static("/static/", STATIC)
     runner = web.AppRunner(app)
     await runner.setup()

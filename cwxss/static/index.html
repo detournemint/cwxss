@@ -34,6 +34,12 @@
         min-height:230px;max-height:44vh;overflow-y:auto;white-space:pre-wrap;
         word-break:break-word;letter-spacing:.06em}
   #text .pending{color:var(--warn);opacity:.85}
+  /* Time anchors in the transcript. An operator copying by ear uses this pane
+     to look back at a word that got away from him, and "five minutes ago"
+     needs something to count from. */
+  #text .stamp{color:var(--dim);font-size:.62em;opacity:.7;margin-right:8px;
+               user-select:none}
+  #text .blk{display:block;margin-bottom:2px}
   /* A repair is never shown as though it were copied. Confident fills are
      tinted, uncertain ones are tinted and marked, so the operator always knows
      which words the radio actually delivered. */
@@ -129,6 +135,9 @@
         <button class="stop" id="stop-btn">STOP</button>
         <button id="clear-btn">Clear</button>
         <button id="save-btn" title="keep the last 60s of audio for training">Save 60s</button>
+        <a href="/transcript" download style="font-size:11px;color:var(--dim);
+           border-bottom:1px dotted #4a5666;text-decoration:none;align-self:center"
+           title="the whole session, timestamped">Transcript</a>
       </div>
     </section>
   </div>
@@ -165,7 +174,11 @@
                style="flex:1;min-width:0">
       </div>
       <div class="row" style="border-top:0">
-        <button class="go" id="log-btn" style="flex:1">Log QSO</button>
+        <button class="go" id="auto-btn" style="flex:1"
+                title="read the callsign and report out of the decoded text">
+          Auto Log</button>
+        <button id="log-btn" title="log what is typed in the boxes above"
+                >Log typed</button>
         <button id="unlog-btn" title="remove the last one">Undo</button>
         <a href="/adif" download style="font-size:11px;color:var(--dim);
            border-bottom:1px dotted #4a5666;text-decoration:none;align-self:center"
@@ -297,9 +310,19 @@ function setDecode(d){
   $("#s-wpm").textContent = d.wpm ? d.wpm + " wpm" : "—";
   $("#s-snr").textContent = d.snr != null ? d.snr + " dB" : "—";
   const el = $("#text");
+  // Only follow the tail when the operator is already at it. Someone reading
+  // back through a net must not be yanked to the bottom every time a character
+  // decodes -- that is the behaviour this pane exists to avoid.
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  el.innerHTML = escapeHtml(d.text || "")
-    + (d.pending ? `<span class="pending">${escapeHtml(d.pending)}</span>` : "");
+  const pend = d.pending
+    ? `<span class="pending">${escapeHtml(d.pending)}</span>` : "";
+  if (d.history && d.history.length){
+    el.innerHTML = d.history.map(b =>
+      `<span class="blk"><span class="stamp">${stampOf(b.at)}</span>`
+      + `${escapeHtml(b.text)}</span>`).join("") + pend;
+  } else {
+    el.innerHTML = escapeHtml(d.text || "") + pend;
+  }
   if (atBottom) el.scrollTop = el.scrollHeight;
   drawScope(d.envelope);
   const nn = $("#neural");
@@ -438,6 +461,12 @@ $("#send").onkeydown = e => {
   if (e.key === "Enter"){ send($("#send").value); $("#send").value = ""; }
 };
 $("#stop-btn").onclick = () => ws && ws.send(JSON.stringify({action:"stop"}));
+function stampOf(epoch){
+  const d = new Date(epoch * 1000);
+  const p = n => String(n).padStart(2, "0");
+  return p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + "Z";
+}
+$("#auto-btn").onclick = () => ws && ws.send(JSON.stringify({action:"autolog"}));
 $("#clear-btn").onclick = () => ws && ws.send(JSON.stringify({action:"clear"}));
 $("#save-btn").onclick = () => ws && ws.send(JSON.stringify({action:"save", seconds:60}));
 $("#wpm-up").onclick = () => ws && ws.send(JSON.stringify({action:"wpm", wpm: ++wpm}));

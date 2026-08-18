@@ -120,6 +120,19 @@ each. Anything marked *needs radio* cannot be worked on without a rig connected.
       baud, DTR keying on the single CAT port, `Can send Morse: N` so hamlib
       cannot key it). Untested against the radio. *(Needs radio.)*
 
+- [x] **Auto-log for POTA.** One button reads the contact out of the decoded
+      text -- callsign by consensus, report, their park for park-to-park, and
+      their state -- and files it. Ten contacts make an activation and each has
+      to be entered while the next station is already calling.
+
+      The state is taken only from its position in the exchange, straight after
+      the report. Half the state abbreviations are ordinary CW: DE means "from"
+      and would otherwise log every contact as Delaware, HI is laughter, IN OR
+      ME OH are words, AR and SK are prosigns.
+
+      A callsign heard only once is still logged -- a missed contact cannot be
+      recovered and Undo is one click -- but the operator is told to check it.
+
 - [ ] **Auto-answer.** The decoder already knows when someone sends our
       callsign. Prompting -- or offering a one-key reply -- would close the loop
       between decoding and the log.
@@ -154,12 +167,16 @@ five channels rather than a segment; net vocabulary (NCS, QNI, QND, traffic).
 
 Still open, in his order of pain:
 
-- [ ] **Scrollback that survives the QSO.** Text is capped at the last 2000
-      characters with no way to reach back five minutes. For net control
-      tracking a roster this is the whole feature.
-- [ ] **Timestamps in the transcript**, so a look-back has an anchor.
-- [ ] **Recording from the browser.** He offered to record his net; that should
-      be one button, not an ssh session.
+- [x] **Scrollback that survives the QSO.** The transcript is now kept as
+      timestamped blocks that break on 20 seconds of silence, so it reads as
+      separate overs rather than one wall. The pane only follows the tail when
+      the operator is already at the bottom -- reading back must not be
+      interrupted by every character that decodes. Full session at
+      `/transcript`, live view carries the last 40 blocks.
+- [x] **Timestamps in the transcript.**
+- [x] **Recording from the browser** -- the Save 60s button already did this.
+
+- [ ] **Auto-answer.** The decoder knows when someone sends our callsign.
 
 He judges decoders against **CWTY (WD6CNF)** and **CwGet (UA9OV)**, not fldigi.
 CWTY has no working download link any more, which is part of why this is worth

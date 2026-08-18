@@ -1,0 +1,21 @@
+# CWops CWT: a one-hour sprint every Wednesday at 1300z, 1900z and 0300z
+# Thursday. Dense, fast, and every station is calling CQ, which is what the
+# RBN reports and therefore what the harvester can find.
+#
+# The slow-speed events matter more for this decoder than the fast ones. CWT
+# runs 25-35 wpm, which is the end we already handle; the measured weakness is
+# slow, wide-spaced sending (35% on ARRL's 5 wpm file). K1USN SST on Sunday
+# 2000z is 20 wpm maximum and is the better test.
+[Unit]
+Description=Harvest CW during a scheduled activity window
+
+[Timer]
+OnCalendar=Wed *-*-* 13:00:00 UTC
+OnCalendar=Wed *-*-* 19:00:00 UTC
+OnCalendar=Thu *-*-* 03:00:00 UTC
+OnCalendar=Sun *-*-* 20:00:00 UTC
+Persistent=false
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
