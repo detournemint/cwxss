@@ -62,7 +62,28 @@ timing is machine-exact, there is nothing for a model to add, and the classic
 decoder is ahead by 2 to 9 points.
 
 That argues for running both and choosing by measured regularity, rather than
-replacing one with the other.
+replacing one with the other -- which is now what happens.
+
+### Choosing between them
+
+How far the gaps are stretched beyond a dit predicts which decoder to believe.
+Standard timing measures 2.0 to 3.7; Farnsworth measures 6.1 and 16.6. The
+correlation with (neural - classic) is +0.63.
+
+| | mean on nine real recordings |
+|---|---|
+| classic alone | 68.6% |
+| neural alone | 70.9% |
+| **chosen by measured gap stretch** | **74.3%** |
+| choosing perfectly every time | 74.3% |
+
+The rule picks one file "wrong" -- 15 wpm, where the neural decoder was ahead by
+0.4 -- and still matches perfect selection to the first decimal. Any threshold
+from 4 to 6 gives the same result, so it is not balanced on a knife edge.
+
+This is fitted on nine recordings, all machine-sent. Whether it holds for
+hand-sent CW is untested, because no labelled recordings of hand-sent CW exist
+to test it on.
 
 ### The benchmark had a bug worth recording
 

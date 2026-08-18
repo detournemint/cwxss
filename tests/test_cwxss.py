@@ -205,6 +205,39 @@ class Streaming(unittest.TestCase):
         self.assertLess(self.stream(a).bandwidth, 110)
 
 
+class DecoderChoice(unittest.TestCase):
+    """Which decoder to believe, measured rather than assumed."""
+
+    def stretch_of(self, **kw):
+        kw.setdefault("snr_db", 22)
+        a = synth.render("CQ POTA DE K6XSS K TEST TEST", pitch=620, seed=5, **kw)
+        e, _, _ = dsp.normalise(dsp.envelope(a, 620, bandwidth=dsp.cw_bandwidth(20)))
+        level = classic.threshold(e)
+        seq = [r for r in classic.runs(e, level) if r[1] >= 2]
+        dit, _ = classic.estimate_dit([n for on, n in seq if on])
+        return classic.gap_stretch(seq, dit)
+
+    def test_standard_timing_reads_low(self):
+        """Character gaps at 3 dits and word gaps at 7 put this near 2-4."""
+        self.assertLess(self.stretch_of(wpm=20), 5.0)
+        self.assertGreater(self.stretch_of(wpm=20), 1.0)
+
+    def test_farnsworth_reads_high(self):
+        """Stretching the gaps is what this measures, so it must see it."""
+        self.assertGreater(self.stretch_of(wpm=20, eff_wpm=7),
+                           self.stretch_of(wpm=20))
+
+    def test_the_threshold_sits_between_them(self):
+        """Measured on nine ARRL recordings: standard timing lands at 2.0-3.7
+        and Farnsworth at 6.1-16.6, so anywhere in 4 to 6 separates them."""
+        self.assertGreater(stream.STRETCH_PREFER_NEURAL, 4.0)
+        self.assertLess(stream.STRETCH_PREFER_NEURAL, 6.0)
+
+    def test_no_gaps_is_not_a_stretch(self):
+        self.assertEqual(classic.gap_stretch([], 10), 0.0)
+        self.assertEqual(classic.gap_stretch([(True, 5)], 0), 0.0)
+
+
 class Guessing(unittest.TestCase):
     def test_fills_a_single_missing_character(self):
         for token, want in (("R?GHT", "RIGHT"), ("SUN?Y", "SUNNY"),

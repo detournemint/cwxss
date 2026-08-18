@@ -47,6 +47,24 @@ def runs(env, level):
             for i in range(len(bounds) - 1)]
 
 
+def gap_stretch(seq, dit):
+    """How far the gaps are stretched beyond a dit.
+
+    Standard timing puts character gaps at 3 dits and word gaps at 7, so this
+    sits near 2-4. Farnsworth stretches the gaps while leaving the characters
+    alone, and it climbs: ARRL's 5 wpm practice measures 16.
+
+    It is worth measuring because it says which decoder to believe. The fixed
+    thresholds in this file fail exactly when the gaps are stretched, and that
+    is exactly where the trained model is strongest.
+    """
+    if not dit:
+        return 0.0
+    gaps = np.array([n for on, n in seq if not on], dtype=float)
+    wide = gaps[gaps > dit * 1.8]
+    return float(np.median(wide) / dit) if wide.size else 0.0
+
+
 def estimate_dit(on_runs):
     """Length of a dit, in frames, from the key-down runs.
 

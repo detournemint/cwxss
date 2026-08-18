@@ -309,8 +309,12 @@ function setDecode(d){
       nn.style.opacity = ".55";
     }
   }
-  if (d.neural_ok && d.neural_conf != null)
-    $("#nn-conf").textContent = Math.round(d.neural_conf * 100) + "%";
+  if (d.neural_ok && d.neural_conf != null){
+    // Say which decoder is being believed and why, rather than showing two
+    // answers and leaving the operator to guess.
+    $("#nn-conf").textContent = Math.round(d.neural_conf * 100) + "%"
+      + (d.prefer === "neural" ? "  \u2713 leading" : "");
+  }
   const g = $("#guessed");
   if (g.style.display !== "none" && d.guessed){
     g.innerHTML = d.guessed.map(t => t.m === "copied"

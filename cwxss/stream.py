@@ -32,6 +32,11 @@ MIN_WPM, MAX_WPM = 8.0, 55.0
 MIN_RATIO, MAX_RATIO = 1.8, 4.5
 MIN_ELEMENTS = 6
 GRACE_S = 4.0      # audio kept in hand while deciding whether it is a signal
+# Above this much gap stretch the sender is using Farnsworth spacing, which is
+# where the classic decoder inserts a word break between every letter and where
+# the model is far ahead. Anywhere in 4 to 6 gives the same result on the nine
+# recordings this was measured on.
+STRETCH_PREFER_NEURAL = 4.5
 
 
 class StreamDecoder:
@@ -70,6 +75,12 @@ class StreamDecoder:
         self.net = neural.NeuralDecoder(model)
         self.neural_text = ""
         self.neural_conf = 0.0
+        # Which decoder to believe, and why. Measured on nine ARRL recordings:
+        # the model wins where the gaps are stretched and the classic decoder
+        # wins where the timing is exact, and choosing between them by that one
+        # measurement scores 74.3% where the better single decoder scores 70.9.
+        self.stretch = 0.0
+        self.prefer = "classic"
 
     def feed(self, audio):
         """Add audio. Returns text newly committed by this chunk."""
@@ -186,6 +197,11 @@ class StreamDecoder:
         if self.net.available and not self.quiet and self.env.size > 100:
             norm, _, _ = dsp.normalise(self.env)
             self.neural_text, self.neural_conf = self.net.decode_scored(norm)
+            level = classic.threshold(norm)
+            seq = [r for r in classic.runs(norm, level) if r[1] >= 2]
+            self.stretch = classic.gap_stretch(seq, self.info.get("dit"))
+            self.prefer = ("neural" if self.stretch >= STRETCH_PREFER_NEURAL
+                           else "classic")
         toks, marks = guess.repair(self.committed[-600:])
         return {
             "pitch": round(self.pitch, 1) if self.pitch else None,
@@ -201,4 +217,8 @@ class StreamDecoder:
             "neural_conf": round(self.neural_conf, 2),
             "neural_ok": self.net.available,
             "neural_error": self.net.error,
+            "stretch": round(self.stretch, 1),
+            "prefer": self.prefer,
+            "best": (self.neural_text if self.prefer == "neural" and self.neural_text
+                     else self.committed[-2000:]),
         }
