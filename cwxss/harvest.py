@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import classic, dsp, guess, neural, score      # noqa: E402
+import classic, dsp, guess, neural, rbn, score  # noqa: E402
 
 # Where CW actually lives on each band, avoiding the digital segments.
 SEGMENTS = {
@@ -86,6 +86,46 @@ def read_wav(path):
     with wave.open(str(path), "rb") as w:
         raw = w.readframes(w.getnframes())
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+
+def rbn_pass(a, model, log):
+    """Record where skimmers say there is something to hear.
+
+    Blind sweeping is a lottery: four seconds per step, back around every two
+    and a half minutes, against a station that transmits maybe a third of the
+    time. Skimmers listen to every frequency at once and publish the answer, so
+    this asks them where to point the radio instead of guessing.
+    """
+    spots = rbn.active_frequencies(a.call, seconds=a.rbn, log=log)
+    if not spots:
+        log("  rbn: nothing being spotted by nearby skimmers")
+        return 0
+    log(f"  rbn: {len(spots)} frequency(s) with a CQ nearby")
+    kept = 0
+    for sp in spots[:CANDIDATES]:
+        dial = int(round(sp["khz"] * 1000))
+        log(f"    {sp['khz']:.1f} {sp['dx']} {sp['snr']}dB {sp['wpm']}wpm "
+            f"via {sp['spotter']}")
+        rig(f"F {dial}")
+        rig("M CW 500")
+        time.sleep(1.5)
+        tmp = Path("/tmp/cwxss-rbn.wav")
+        if not record(a.record, a.device, tmp):
+            continue
+        audio = read_wav(tmp)
+        real = dsp.find_cw_signals(audio, RATE, net=model)
+        if not real:
+            log("      heard nothing here")
+            continue
+        best = dict(real[0])
+        best["dial"] = dial
+        best["band"] = ""
+        best["rbn_dx"] = sp["dx"]
+        out, meta = keep(audio, best, a.out, model)
+        kept += 1
+        log(f"      kept {out.name} [{real[0].get('read_by')}] "
+            f"{real[0]['sample'][:34]!r}")
+    return kept
 
 
 def check_receiver(log):
@@ -199,6 +239,12 @@ async def main():
     ap.add_argument("--model", default=str(Path.home() / "models/cw.onnx"))
     ap.add_argument("--dwell", type=int, default=4, help="seconds per sweep step")
     ap.add_argument("--record", type=int, default=90, help="seconds per keeper")
+    ap.add_argument("--rbn", type=int, default=0, metavar="SECONDS",
+                    help="listen to the Reverse Beacon Network for this long "
+                         "and record where nearby skimmers hear a CQ, instead "
+                         "of sweeping blind")
+    ap.add_argument("--call", default="K6XSS",
+                    help="callsign used to log in to the RBN feed")
     a = ap.parse_args()
 
     def log(m):
@@ -214,6 +260,21 @@ async def main():
 
     end = time.time() + a.minutes * 60
     kept = 0
+    if a.rbn:
+        try:
+            while time.time() < end:
+                kept += rbn_pass(a, model, log)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if before[0]:
+                rig(f"F {before[0]}")
+            if before[1]:
+                parts = before[1].split()
+                if len(parts) >= 2:
+                    rig(f"M {parts[0]} {parts[1]}")
+            log(f"harvest done: {kept} recordings kept")
+        return
     known = set(SEGMENTS) | set(CHANNELS)
     bands = [b.strip() for b in a.bands.split(",") if b.strip() in known]
     try:

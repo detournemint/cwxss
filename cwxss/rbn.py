@@ -21,6 +21,84 @@ SPOT = re.compile(
     r"(?P<mode>\w+)\s+(?P<snr>-?\d+)\s*dB\s+(?P<wpm>\d+)\s*WPM\s+(?P<kind>\w+)")
 
 
+# Skimmers whose propagation resembles ours closely enough to be worth
+# following. A spot from Europe says a station is transmitting; it says nothing
+# about whether this antenna can hear it, and 20m to Europe and 20m to
+# California are different paths at the same moment. Override for a station
+# outside the western US.
+NEARBY = ("W6", "K6", "N6", "AI6", "KM6", "KE6", "AE6", "WW6",
+          "W7", "K7", "N7", "AA7", "KE7", "AI7", "VE7", "KH6")
+
+
+def active_frequencies(call, seconds=60, prefixes=NEARBY, min_snr=3,
+                       bands=None, log=print):
+    """Where nearby skimmers are hearing CW right now, strongest first.
+
+    A blind band scan is a lottery. It pauses four seconds on each step and
+    comes back about every two and a half minutes, while a station calling CQ
+    transmits maybe a third of the time -- so most passes miss most stations,
+    and an empty sweep mostly measures the sampling rather than the band. Three
+    separate sweeps here reported nothing on 20m while skimmers forty miles
+    away were spotting stations inside the range being swept.
+
+    Skimmers are already listening on every frequency at once. Asking them
+    where to point the radio turns a search into a lookup.
+
+    Only CQ spots are returned, because a station calling CQ will still be
+    calling in a minute and a station answering one will not.
+    """
+    import socket
+    out = {}
+    try:
+        sock = socket.create_connection((HOST, PORT), timeout=20)
+        sock.sendall((call.upper() + "\n").encode())
+        end = time.time() + seconds
+        buf = b""
+        while time.time() < end:
+            try:
+                sock.settimeout(3)
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                m = SPOT.search(line.decode(errors="replace"))
+                if not m:
+                    continue
+                d = m.groupdict()
+                if d["mode"].upper() != "CW" or d["kind"].upper() != "CQ":
+                    continue
+                if not d["spotter"].rstrip("-#").upper().startswith(
+                        tuple(prefixes)):
+                    continue
+                snr = int(d["snr"])
+                if snr < min_snr:
+                    continue
+                khz = float(d["khz"])
+                if bands and not any(lo <= khz * 1000 <= hi
+                                     for lo, hi in bands):
+                    continue
+                # Same frequency spotted by several skimmers: keep the best
+                # report, it is the same signal.
+                prev = out.get(round(khz, 1))
+                if prev is None or snr > prev["snr"]:
+                    out[round(khz, 1)] = {
+                        "khz": khz, "dx": d["dx"], "snr": snr,
+                        "wpm": int(d["wpm"]), "spotter":
+                        d["spotter"].rstrip("-#"),
+                    }
+        sock.close()
+    except OSError as e:
+        log(f"  rbn unavailable: {e}")
+        return []
+    return sorted(out.values(), key=lambda s: -s["snr"])
+
+
 class RbnMonitor:
     """Watches the feed for our own callsign."""
 
