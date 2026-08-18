@@ -221,9 +221,23 @@ async def main():
     except KeyboardInterrupt:
         pass
     finally:
+        # Restore the mode as well as the dial. Sweeping opens the filter to
+        # 3000 Hz to find signals, and an earlier version put the frequency
+        # back but not the filter, so the live decoder was left listening
+        # through six times the bandwidth it wants -- silently, because
+        # everything still works, just worse. The log claimed both had been
+        # restored, which is how it went unnoticed.
         if before[0]:
             rig(f"F {before[0]}")
-        log(f"harvest done: {kept} recordings kept")
+        if before[1]:
+            parts = before[1].split()
+            if len(parts) >= 2:
+                rig(f"M {parts[0]} {parts[1]}")
+            elif parts:
+                rig(f"M {parts[0]} 0")
+        now = rig("f"), rig("m")
+        ok = "restored" if now == before else f"WANTED {before}, GOT {now}"
+        log(f"harvest done: {kept} recordings kept, {ok}")
 
 
 if __name__ == "__main__":
