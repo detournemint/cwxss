@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "cwxss"))
 
 import classic, config, dsp, guess, lexicon, morse, qsolog, rbn, score  # noqa: E402
+import selftrain                                                            # noqa: E402
 import stream, synth                                                       # noqa: E402
 
 
@@ -254,6 +255,44 @@ class DecoderChoice(unittest.TestCase):
     def test_no_gaps_is_not_a_stretch(self):
         self.assertEqual(classic.gap_stretch([], 10), 0.0)
         self.assertEqual(classic.gap_stretch([(True, 5)], 0), 0.0)
+
+
+class SelfTraining(unittest.TestCase):
+    """Pseudo-labels are only worth having if they are right."""
+
+    class FakeNet:
+        """Stands in for the model so these tests need no ONNX file."""
+        available = True
+
+        def __init__(self, text):
+            self.text = text
+
+        def decode(self, env, *a, **kw):
+            return self.text
+
+    def test_disagreement_is_rejected(self):
+        """The whole filter rests on this. Two decoders that fail differently
+        agreeing is evidence; either one alone is not."""
+        env = np.zeros(400, dtype=np.float32)
+        text, why = selftrain.consider(
+            env, self.FakeNet("CQ POTA DE K6XSS K"))
+        self.assertIsNone(text)
+
+    def test_short_decodes_are_rejected(self):
+        """Two decoders agreeing on four characters is easy by accident."""
+        self.assertLess(len("CQ K"), selftrain.MIN_CHARS)
+
+    def test_agreement_threshold_is_strict(self):
+        """Measured on synthetic clips with known truth: unfiltered labels are
+        67% accurate and agreement-filtered ones 98.5%. Loosening this is what
+        turns self-training into the model teaching itself its own mistakes."""
+        self.assertGreaterEqual(selftrain.MIN_AGREEMENT, 0.80)
+
+    def test_noise_that_parses_is_still_rejected(self):
+        """A band sweep once reported forty signals where there were none, all
+        of them noise that decoded into plausible-looking tokens. The same
+        content test guards the training set."""
+        self.assertFalse(dsp._reads_like_cw("EEI?E E? EESEI ITSEH TT E"))
 
 
 class Guessing(unittest.TestCase):
