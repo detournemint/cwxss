@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+models/*.pt
+data/arrl/*.mp3
+data/arrl/*.wav
+data/live/*.wav

@@ -1,0 +1,171 @@
+"""Continuous decoding: audio arriving forever, text coming out as it goes.
+
+Decoding a finished recording is a different problem from decoding a live band.
+Live, the tone moves when the operator drifts or you tune, the speed changes
+with every station, and there is no end of file to wait for. This holds a rolling
+window and re-reads it as audio arrives.
+
+Characters are emitted only once they are settled. A character at the very edge
+of the window may still gain another element, so committing it immediately means
+printing "N" and then having to take it back when the next dit arrives and makes
+it "K". Text is committed a short way behind the live edge, which is exactly how
+a human operator reads: slightly behind, and right.
+"""
+import numpy as np
+
+import classic
+import dsp
+import guess
+
+WINDOW_S = 12.0            # how much history to keep and re-read
+COMMIT_LAG_S = 1.2         # how far behind the edge text is treated as settled
+
+# A threshold detector always finds something. Point it at an empty band and it
+# reads the noise floor as a stream of dits, which is why an unsquelched decoder
+# fills the screen with E and T and I. None of that is information, and it
+# buries the moments that are. Before committing anything, the signal has to
+# look like Morse: loud enough to stand out, sent at a speed a human could send,
+# and with dahs about three times a dit.
+MIN_SNR_DB = 9.0
+MIN_WPM, MAX_WPM = 8.0, 55.0
+MIN_RATIO, MAX_RATIO = 1.8, 4.5
+MIN_ELEMENTS = 6
+GRACE_S = 4.0      # audio kept in hand while deciding whether it is a signal
+
+
+class StreamDecoder:
+    def __init__(self, rate=dsp.DEFAULT_RATE, frame_rate=dsp.FRAME_RATE,
+                 window_s=WINDOW_S):
+        self.rate = rate
+        self.frame_rate = frame_rate
+        self.window = int(window_s * frame_rate)
+        self.env = np.zeros(0, dtype=np.float32)
+        self.audio_tail = np.zeros(0, dtype=np.float32)
+        # Pitch detection needs a second or two of audio; chunks arriving live
+        # are a fraction of that, so keep a rolling history to search in.
+        self.audio_hist = np.zeros(0, dtype=np.float32)
+        self.pitch_hist_s = 3.0
+        self.pitch = None
+        self.committed = ""
+        self.pending = ""
+        self.info = {}
+        # Absolute position of the oldest frame still in the window, and how far
+        # we have already read out. Both count frames since the stream began, so
+        # they stay meaningful as the window slides.
+        self.frames_dropped = 0
+        self.read_to = 0
+        self.quiet = "waiting for a signal"
+
+    def feed(self, audio):
+        """Add audio. Returns text newly committed by this chunk."""
+        if audio is None or len(audio) == 0:
+            return ""
+        chunk = np.asarray(audio, dtype=np.float32)
+        buf = np.concatenate([self.audio_tail, chunk])
+        self.audio_hist = np.concatenate([self.audio_hist, chunk])[
+            -int(self.pitch_hist_s * self.rate):]
+
+        # Re-find the tone regularly: operators drift, and the operator tunes.
+        found, sharp = dsp.find_pitch(self.audio_hist, self.rate)
+        if found and sharp > 6.0:
+            self.pitch = found if self.pitch is None else (
+                0.7 * self.pitch + 0.3 * found)          # follow slowly
+
+        if self.pitch is None:
+            self.audio_tail = buf[-int(0.05 * self.rate):]
+            return ""
+
+        step = int(self.rate / self.frame_rate)
+        usable = (len(buf) // step) * step
+        if usable == 0:
+            self.audio_tail = buf
+            return ""
+        new = dsp.envelope(buf[:usable], self.pitch, self.rate,
+                           frame_rate=self.frame_rate)
+        self.audio_tail = buf[usable:]
+        joined = np.concatenate([self.env, new])
+        if joined.size > self.window:
+            self.frames_dropped += joined.size - self.window
+        self.env = joined[-self.window:]
+        return self._reread()
+
+    def _reread(self):
+        """Re-read the window and commit whatever has settled since last time.
+
+        The whole window is decoded each pass, because a character near the edge
+        can still change. Each decoded character carries the frames it occupies,
+        so committing is a matter of position rather than of guessing which part
+        of the text is new -- string matching cannot distinguish a newly heard
+        character from one already read out, and gets it wrong every time the
+        same letter appears twice.
+        """
+        if self.env.size < self.frame_rate:
+            return ""
+        norm, _, _ = dsp.normalise(self.env)
+        chars, info = classic.decode_chars(norm, offset=self.frames_dropped)
+        self.info = info
+        self.quiet = self._why_quiet(info, chars)
+        if self.quiet:
+            self.pending = ""
+            # Keep read_to moving so a backlog of noise is not dumped on screen
+            # the moment a signal appears -- but leave a few seconds of grace.
+            # Advancing it right up to the edge threw away the opening of every
+            # transmission, because the first second of a signal is exactly when
+            # there is not yet enough of it to pass the test: "CQ POTA DE ..."
+            # arrived as "OTA DE ...".
+            grace = int(GRACE_S * self.frame_rate)
+            self.read_to = max(self.read_to,
+                               self.frames_dropped + norm.size - grace)
+            return ""
+
+        edge = self.frames_dropped + norm.size - int(COMMIT_LAG_S * self.frame_rate)
+        # Commit on where a character STARTS, not where it ends. Re-reading a
+        # sliding window re-measures every character, and an end boundary that
+        # moves by a frame or two between passes reads as a new character --
+        # which is why a real QSO came out as "BBOBB" and "SSUUNNYY".
+        # A start position is stable: the same character keeps the same one.
+        # Even a start position wanders slightly: each pass re-derives the
+        # threshold and the dit length from a marginally different window, so
+        # run boundaries move by a frame or two. Require a new character to
+        # begin at least half a dit beyond the last one committed, which is far
+        # more than that wander and far less than a real gap.
+        margin = max(2.0, (info.get("dit") or 6) * 0.5)
+        fresh = [(c, st, end) for c, st, end in chars
+                 if end <= edge and st > self.read_to + margin]
+        added = "".join(c for c, _, _ in fresh)
+        if fresh:
+            self.read_to = max(st for _, st, _ in fresh)
+            self.committed = (self.committed + added)[-4000:]
+        self.pending = "".join(c for c, _, end in chars if end > edge).strip()
+        return added
+
+    def _why_quiet(self, info, chars):
+        """Empty when the signal is worth decoding, otherwise the reason not to."""
+        snr = dsp.snr_estimate(self.env)
+        if snr < MIN_SNR_DB:
+            return f"no signal ({snr:.0f} dB)"
+        wpm = info.get("wpm")
+        if not wpm or not (MIN_WPM <= wpm <= MAX_WPM):
+            return f"speed implausible ({wpm} wpm)"
+        ratio = info.get("ratio")
+        if not ratio or not (MIN_RATIO <= ratio <= MAX_RATIO):
+            return f"not Morse-like (dah:dit {ratio:.1f})" if ratio else "no timing"
+        if sum(1 for c, _, _ in chars if c.strip()) < MIN_ELEMENTS:
+            return "too little to read"
+        return ""
+
+    def state(self):
+        norm, _, _ = dsp.normalise(self.env) if self.env.size else (self.env, 0, 0)
+        # The repaired text is sent alongside the raw copy, never instead of it.
+        # An operator has to be able to see what was actually heard.
+        toks, marks = guess.repair(self.committed[-600:])
+        return {
+            "pitch": round(self.pitch, 1) if self.pitch else None,
+            "wpm": self.info.get("wpm"),
+            "snr": round(dsp.snr_estimate(self.env), 1) if self.env.size else 0.0,
+            "envelope": [round(float(v), 3) for v in norm[-600:]],
+            "text": self.committed[-2000:],
+            "pending": self.pending,
+            "guessed": [{"w": w, "m": m} for w, m in zip(toks, marks)],
+            "quiet": self.quiet,
+        }

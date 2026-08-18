@@ -1,0 +1,11 @@
+{
+  "freq": "7030000",
+  "mode": "CW\n500",
+  "pitch_hz": 692.7,
+  "wpm": 19.3,
+  "snr_db": 16.6,
+  "decoded": "TLL WARNERR == X 6 =  KK?KG KK  1KG 5E  VA7LXXX  VAA?7DDXXKK  KK         ?EEIILL HR BBOBB ,,?KKWELLL E ??RM DDAYY ES SSUUNNYY=  =ITIS  21",
+  "note": "first real off-air CW",
+  "seconds": 60.0,
+  "recorded": "2026-08-18T03:19:00.097248+00:00"
+}

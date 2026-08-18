@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cwxss</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171b21; --line:#262c35; --fg:#e6e9ee; --dim:#8b95a3;
+    --accent:#4aa3ff; --ok:#2ee06a; --warn:#f0a02c; --bad:#ff5d5d;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,
+       BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:10px 16px;
+         background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;color:var(--accent);
+         letter-spacing:.08em;font-size:17px}
+  .pill{display:flex;align-items:center;gap:7px;background:#11151a;
+        border:1px solid var(--line);border-radius:7px;padding:4px 10px;font-size:12px}
+  .pill span{color:var(--dim)}
+  .pill b{font-family:var(--mono)}
+  .spacer{margin-left:auto}
+  main{display:grid;grid-template-columns:1fr 340px;gap:12px;padding:12px;
+       align-items:start}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         overflow:hidden}
+  .panel h2{margin:0;padding:9px 13px;font-size:11px;text-transform:uppercase;
+            letter-spacing:.1em;color:var(--dim);border-bottom:1px solid var(--line)}
+  #scope{display:block;width:100%;height:120px;background:#0b0e12}
+  #text{font-family:var(--mono);font-size:19px;line-height:1.75;padding:14px;
+        min-height:230px;max-height:44vh;overflow-y:auto;white-space:pre-wrap;
+        word-break:break-word;letter-spacing:.06em}
+  #text .pending{color:var(--warn);opacity:.85}
+  /* A repair is never shown as though it were copied. Confident fills are
+     tinted, uncertain ones are tinted and marked, so the operator always knows
+     which words the radio actually delivered. */
+  .g-guessed{color:#8fd0ff;border-bottom:1px dotted #4aa3ff}
+  .g-unsure{color:var(--warn);border-bottom:1px dotted var(--warn)}
+  .g-unsure::after{content:"?";font-size:.7em;vertical-align:super;opacity:.8}
+  .row{display:flex;align-items:center;gap:8px;padding:10px 13px;flex-wrap:wrap;
+       border-top:1px solid var(--line)}
+  button{background:#1b2330;border:1px solid #33404f;color:var(--fg);
+         border-radius:7px;padding:7px 13px;cursor:pointer;font-size:13px}
+  button:hover{background:#243040}
+  button.go{background:#14301f;border-color:#2b7a4b;color:#9df0c0}
+  button.stop{background:#3a1414;border-color:#7a2020;color:#ffb3b3;font-weight:700}
+  button:disabled{opacity:.4;cursor:default}
+  input[type=text]{flex:1;min-width:180px;background:#11151a;border:1px solid
+    var(--line);color:var(--fg);border-radius:7px;padding:9px 11px;
+    font-family:var(--mono);font-size:15px;letter-spacing:.06em}
+  .macros{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding:11px 13px}
+  .macros button{text-align:left;font-family:var(--mono);font-size:12px;
+                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .macros button i{color:var(--dim);font-style:normal;margin-right:7px}
+  .kv{display:flex;justify-content:space-between;padding:6px 13px;font-size:12px;
+      border-top:1px solid rgba(255,255,255,.04)}
+  .kv span{color:var(--dim)} .kv b{font-family:var(--mono)}
+  .truth{padding:9px 13px;font-family:var(--mono);font-size:12px;color:var(--dim);
+         border-top:1px solid var(--line)}
+  .truth b{color:var(--ok)}
+  #sending{display:none;align-items:center;gap:10px;padding:9px 14px;
+           background:#3a1414;border:1px solid #7a2020;color:#ffb3b3;
+           border-radius:9px;margin:0 12px;font-family:var(--mono)}
+  #sending.on{display:flex}
+  .dot{width:9px;height:9px;border-radius:99px;background:#ff5d5d;
+       animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.25}}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">cwxss</span>
+  <div class="pill"><span>pitch</span><b id="m-pitch">—</b></div>
+  <div class="pill"><span>speed</span><b id="m-wpm">—</b></div>
+  <div class="pill"><span>snr</span><b id="m-snr">—</b></div>
+  <div class="pill spacer"><span>source</span><b id="m-src">—</b></div>
+  <div class="pill"><span>link</span><b id="m-link">…</b></div>
+</header>
+
+<div id="sending"><span class="dot"></span><span>SENDING</span>
+  <span id="sending-text"></span></div>
+
+<main>
+  <div>
+    <section class="panel">
+      <h2>Signal</h2>
+      <canvas id="scope"></canvas>
+    </section>
+    <section class="panel" style="margin-top:12px">
+      <h2>Decoded <span id="guess-toggle" style="float:right;font-size:10px;
+        cursor:pointer;color:var(--accent);text-transform:none;letter-spacing:0"
+        >show best guess</span></h2>
+      <div id="text"></div>
+      <div id="guessed" style="display:none;font-family:var(--mono);font-size:17px;
+        line-height:1.7;padding:12px 14px;border-top:1px solid var(--line);
+        letter-spacing:.05em"></div>
+      <div class="truth" id="truth"></div>
+      <div class="row">
+        <input type="text" id="send" placeholder="type here, Enter to send as CW"
+               autocomplete="off" spellcheck="false">
+        <button class="go" id="send-btn">Send</button>
+        <button class="stop" id="stop-btn">STOP</button>
+        <button id="clear-btn">Clear</button>
+        <button id="save-btn" title="keep the last 60s of audio for training">Save 60s</button>
+      </div>
+    </section>
+  </div>
+
+  <div>
+    <section class="panel">
+      <h2>Macros <span id="setsw" style="float:right;font-size:10px;
+        text-transform:none;letter-spacing:0"></span></h2>
+      <div class="row" style="border-top:0">
+        <span style="color:var(--dim);font-size:12px">working</span>
+        <input type="text" id="his" placeholder="his call" autocomplete="off"
+               spellcheck="false" style="flex:1;min-width:0">
+      </div>
+      <div class="macros" id="macros"></div>
+      <div class="row">
+        <span style="color:var(--dim);font-size:12px">keyer speed</span>
+        <button id="wpm-down">&minus;</button>
+        <b id="wpm-val" style="font-family:var(--mono);min-width:52px;
+           text-align:center">— wpm</b>
+        <button id="wpm-up">+</button>
+      </div>
+    </section>
+    <section class="panel" style="margin-top:12px">
+      <h2>Who hears me <span id="rbn-at" style="float:right;font-size:10px;
+        text-transform:none;letter-spacing:0;color:var(--dim)"></span></h2>
+      <div class="kv"><span>skimmer spots (1h)</span><b id="rbn-n">—</b></div>
+      <div class="kv"><span>best report</span><b id="rbn-best">—</b></div>
+      <div id="rbn-list" style="padding:4px 13px 10px;font-family:var(--mono);
+        font-size:11px;color:var(--dim)"></div>
+      <div style="padding:0 13px 11px;font-size:11px;color:var(--dim)">
+        Skimmers only report stations calling CQ.</div>
+    </section>
+    <section class="panel" style="margin-top:12px">
+      <h2>Station</h2>
+      <div class="kv"><span>tone</span><b id="s-pitch">—</b></div>
+      <div class="kv"><span>sender speed</span><b id="s-wpm">—</b></div>
+      <div class="kv"><span>signal</span><b id="s-snr">—</b></div>
+      <div class="kv"><span>keying</span><b id="s-key">—</b></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let ws, canSend = false, wpm = 20, cfg = {messages: []}, loadedBuild = null;
+
+// Placeholders are filled in on the server at the moment of sending, so what
+// is shown here is the template. The station being worked comes from the
+// "working" box, which the operator fills from the decoded text.
+function expand(t){
+  return (t || "").replace(/\{call\}/g, cfg.call || "")
+    .replace(/\{his\}/g, $("#his").value.toUpperCase() || "…")
+    .replace(/\{rst\}/g, cfg.rst || "5NN")
+    .replace(/\{state\}/g, cfg.state || "")
+    .replace(/\{park\}/g, cfg.park || "").replace(/\s+/g, " ").trim();
+}
+function activeMessages(){
+  return (cfg.sets || {})[cfg.active] || cfg.messages || [];
+}
+function drawSetSwitch(){
+  const sets = Object.keys(cfg.sets || {});
+  $("#setsw").innerHTML = sets.map(n =>
+    `<span class="setbtn${n === cfg.active ? " on" : ""}" data-s="${n}">${n}</span>`
+  ).join("");
+  document.querySelectorAll(".setbtn").forEach(b => {
+    b.onclick = () => ws && ws.send(JSON.stringify({action:"macroset", set:b.dataset.s}));
+  });
+}
+function setRbn(r){
+  if (!r) return;
+  $("#rbn-at").textContent = r.connected ? "live" : (r.error || "offline");
+  $("#rbn-at").style.color = r.connected ? "var(--ok)" : "var(--warn)";
+  $("#rbn-n").textContent = r.count || 0;
+  $("#rbn-best").textContent = r.best != null ? r.best + " dB" : "—";
+  $("#rbn-list").innerHTML = (r.spots || []).map(s =>
+    `<div>${s.spotter} &nbsp;${s.khz.toFixed(1)} &nbsp;${s.snr} dB &nbsp;`
+    + `${s.wpm} wpm &nbsp;${s.ago}s ago</div>`).join("")
+    || '<div>nothing yet — call CQ and skimmers will report you</div>';
+}
+function drawMacros(){
+  drawSetSwitch();
+  $("#macros").innerHTML = activeMessages().map((m, i) =>
+    `<button data-i="${i}" title="${expand(m.text)}"><i>${m.key}</i>${m.label}</button>`
+  ).join("");
+  document.querySelectorAll("#macros button").forEach(b => {
+    b.onclick = () => ws && ws.send(JSON.stringify({action:"macro", index:+b.dataset.i}));
+  });
+}
+function send(text){
+  if (!text) return;
+  ws && ws.send(JSON.stringify({action:"send", text}));
+}
+
+/* ---- the signal display: a scrolling view of the envelope ---------------- */
+const cv = $("#scope"), cx = cv.getContext("2d");
+function drawScope(env){
+  const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
+  if (cv.width !== w*dpr || cv.height !== h*dpr){ cv.width = w*dpr; cv.height = h*dpr; }
+  cx.setTransform(dpr,0,0,dpr,0,0);
+  cx.fillStyle = "#0b0e12"; cx.fillRect(0,0,w,h);
+  if (!env || !env.length) return;
+  const n = env.length, step = w / n;
+  cx.fillStyle = "#1d3a5c";
+  cx.strokeStyle = "#4aa3ff"; cx.lineWidth = 1;
+  cx.beginPath();
+  for (let i = 0; i < n; i++){
+    const v = Math.max(0, Math.min(1, env[i]));
+    const y = h - v * (h - 8) - 4;
+    i ? cx.lineTo(i*step, y) : cx.moveTo(i*step, y);
+  }
+  cx.stroke();
+  // key-down shading, so the dits and dahs are visible as shapes
+  cx.fillStyle = "rgba(74,163,255,.22)";
+  for (let i = 0; i < n; i++){
+    if (env[i] > 0.5) cx.fillRect(i*step, 4, Math.max(step,1), h-8);
+  }
+  cx.strokeStyle = "rgba(255,255,255,.10)";
+  cx.beginPath(); cx.moveTo(0, h*0.5); cx.lineTo(w, h*0.5); cx.stroke();
+}
+
+function setDecode(d){
+  if (!d) return;
+  $("#m-pitch").textContent = d.pitch ? d.pitch + " Hz" : "—";
+  $("#m-wpm").textContent = d.wpm ? d.wpm + " wpm" : "—";
+  $("#m-snr").textContent = d.snr != null ? d.snr + " dB" : "—";
+  $("#s-pitch").textContent = d.pitch ? d.pitch + " Hz" : "—";
+  $("#s-wpm").textContent = d.wpm ? d.wpm + " wpm" : "—";
+  $("#s-snr").textContent = d.snr != null ? d.snr + " dB" : "—";
+  const el = $("#text");
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  el.innerHTML = escapeHtml(d.text || "")
+    + (d.pending ? `<span class="pending">${escapeHtml(d.pending)}</span>` : "");
+  if (atBottom) el.scrollTop = el.scrollHeight;
+  drawScope(d.envelope);
+  const g = $("#guessed");
+  if (g.style.display !== "none" && d.guessed){
+    g.innerHTML = d.guessed.map(t => t.m === "copied"
+      ? escapeHtml(t.w)
+      : `<span class="g-${t.m}">${escapeHtml(t.w)}</span>`).join(" ");
+    g.scrollTop = g.scrollHeight;
+  }
+}
+let toastTimer = null;
+function toast(msg, bad){
+  let el = document.getElementById("toast");
+  if (!el){
+    el = document.createElement("div"); el.id = "toast";
+    el.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);"
+      + "background:#171b21;border:1px solid #33404f;border-radius:9px;padding:10px 16px;"
+      + "font-family:var(--mono);font-size:13px;z-index:99;box-shadow:0 6px 22px #0009";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.borderColor = bad ? "#7a2020" : "#2b7a4b";
+  el.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = "none"; }, 3500);
+}
+function showStale(){
+  let b = document.getElementById("stale");
+  if (b) return;
+  b = document.createElement("div"); b.id = "stale";
+  b.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:200;padding:9px 14px;"
+    + "background:#3a2d10;border-bottom:1px solid #8a6d1e;color:#f5dd9a;"
+    + "font:600 13px/1.4 ui-monospace,monospace;text-align:center;cursor:pointer";
+  b.textContent = "This page is out of date \u2014 the decoder has been updated. "
+                + "Click to reload.";
+  b.onclick = () => {
+    // reload(true) is ignored by modern browsers. Changing the URL is not.
+    const u = new URL(location.href);
+    u.searchParams.set("v", Date.now());
+    location.replace(u.toString());
+  };
+  document.body.appendChild(b);
+}
+function escapeHtml(t){ return String(t).replace(/[&<>]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function connect(){
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { $("#m-link").textContent = "live";
+                      $("#m-link").style.color = "var(--ok)"; };
+  ws.onclose = () => { $("#m-link").textContent = "reconnecting…";
+                       $("#m-link").style.color = "var(--warn)";
+                       setTimeout(connect, 1500); };
+  ws.onmessage = ev => {
+    const {type, data} = JSON.parse(ev.data);
+    if (type === "hello"){
+      $("#m-src").textContent = data.source;
+      canSend = data.can_send; wpm = data.wpm || 20;
+      cfg = data.cfg || cfg; $("#his").value = data.his || ""; drawMacros();
+      // If the server is serving a different interface than the one running
+      // here, say so. Otherwise a deployed fix looks like a fix that failed.
+      if (loadedBuild === null) loadedBuild = data.build;
+      else if (data.build && data.build !== loadedBuild) showStale();
+      $("#wpm-val").textContent = wpm + " wpm";
+      $("#s-key").textContent = canSend ? "ready" : "no radio";
+      $("#s-key").style.color = canSend ? "var(--ok)" : "var(--dim)";
+      ["#send-btn","#stop-btn"].forEach(s => $(s).disabled = !canSend);
+      setDecode(data.decode); setRbn(data.rbn);
+    }
+    else if (type === "decode") setDecode(data);
+    else if (type === "truth")
+      $("#truth").innerHTML = "demo signal, actually sent: <b>"
+        + escapeHtml(data.text) + "</b> at " + data.wpm + " wpm";
+    else if (type === "cfg"){ cfg = data; drawMacros(); }
+    else if (type === "rbn"){ setRbn(data); }
+    else if (type === "wpm"){ wpm = data.wpm; $("#wpm-val").textContent = wpm+" wpm"; }
+    else if (type === "sending"){
+      $("#sending").className = data.text ? "on" : "";
+      $("#sending-text").textContent = data.text || "";
+    }
+    else if (type === "ack"){
+      toast(data.who || (data.ok ? "ok" : "failed"), !data.ok);
+    }
+  };
+}
+
+$("#guess-toggle").onclick = () => {
+  const g = $("#guessed"), on = g.style.display === "none";
+  g.style.display = on ? "block" : "none";
+  $("#guess-toggle").textContent = on ? "hide best guess" : "show best guess";
+};
+$("#send-btn").onclick = () => { send($("#send").value); $("#send").value = ""; };
+$("#send").onkeydown = e => {
+  if (e.key === "Enter"){ send($("#send").value); $("#send").value = ""; }
+};
+$("#stop-btn").onclick = () => ws && ws.send(JSON.stringify({action:"stop"}));
+$("#clear-btn").onclick = () => ws && ws.send(JSON.stringify({action:"clear"}));
+$("#save-btn").onclick = () => ws && ws.send(JSON.stringify({action:"save", seconds:60}));
+$("#wpm-up").onclick = () => ws && ws.send(JSON.stringify({action:"wpm", wpm: ++wpm}));
+$("#wpm-down").onclick = () => ws && ws.send(JSON.stringify({action:"wpm", wpm: --wpm}));
+document.addEventListener("keydown", e => {
+  const m = /^F(\d{1,2})$/.exec(e.key);
+  if (m && ws){
+    const i = +m[1] - 1;
+    if (i < activeMessages().length){
+      e.preventDefault();
+      ws.send(JSON.stringify({action:"macro", index:i}));
+    }
+  }
+  if (e.key === "Escape") $("#stop-btn").click();     // always available
+});
+$("#his").oninput = () => { drawMacros();
+  ws && ws.send(JSON.stringify({action:"his", call: $("#his").value})); };
+drawMacros(); connect();
+addEventListener("resize", () => drawScope(null));
+</script>
+</body>
+</html>
