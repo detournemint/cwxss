@@ -24,7 +24,9 @@ def make_clip(rng, wpm=None, snr=None, fist=None, text=None, pitch=None,
               qsb_depth=None, qrm=None):
     """One (envelope, text) pair with randomised conditions."""
     text = text if text is not None else hamtext.sample(rng)
-    wpm = wpm if wpm is not None else float(rng.uniform(10, 35))
+    # Down to 8 wpm: ARRL practice starts at 5 wpm effective and beginners on
+    # the air are slower than the model had ever seen.
+    wpm = wpm if wpm is not None else float(rng.uniform(8, 38))
     snr = snr if snr is not None else float(rng.uniform(-2, 28))
     pitch = pitch if pitch is not None else float(rng.uniform(400, 900))
     if fist is None:
@@ -37,8 +39,12 @@ def make_clip(rng, wpm=None, snr=None, fist=None, text=None, pitch=None,
     # a given length always means the same thing, which is false for most of the
     # operators it will actually meet.
     eff = None
-    if rng.random() < 0.33:
-        eff = float(rng.uniform(0.45, 0.95)) * wpm
+    if rng.random() < 0.40:
+        # Up to a 3:1 ratio. ARRL sends its 5 wpm practice as 15 wpm characters
+        # with enormous gaps, and a model that has only seen 2:1 reads the gaps
+        # as word breaks -- 35% on a file that is otherwise pristine. Beginners
+        # are taught this way and a great many of them send this way.
+        eff = wpm / float(rng.uniform(1.05, 3.2))
     # Static crashes on a quarter, because a threshold detector reads a
     # lightning burst as key-down and the model needs to learn not to.
     qrn = float(rng.uniform(0.5, 4.0)) if rng.random() < 0.25 else 0.0

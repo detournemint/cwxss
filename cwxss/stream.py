@@ -16,6 +16,7 @@ import numpy as np
 import classic
 import dsp
 import guess
+import neural
 
 WINDOW_S = 12.0            # how much history to keep and re-read
 COMMIT_LAG_S = 1.2         # how far behind the edge text is treated as settled
@@ -35,7 +36,7 @@ GRACE_S = 4.0      # audio kept in hand while deciding whether it is a signal
 
 class StreamDecoder:
     def __init__(self, rate=dsp.DEFAULT_RATE, frame_rate=dsp.FRAME_RATE,
-                 window_s=WINDOW_S):
+                 window_s=WINDOW_S, model="models/cw.onnx"):
         self.rate = rate
         self.frame_rate = frame_rate
         self.window = int(window_s * frame_rate)
@@ -62,6 +63,12 @@ class StreamDecoder:
         self.read_to = 0
         self.quiet = "waiting for a signal"
         self.bandwidth = 80.0
+        # The trained decoder runs beside the classic one rather than replacing
+        # it. It is better where the classic decoder fails -- a hand fist,
+        # Farnsworth spacing, a fading signal -- and no better where it does
+        # not, so showing both lets the operator see which to believe.
+        self.net = neural.NeuralDecoder(model)
+        self.neural_text = ""
 
     def feed(self, audio):
         """Add audio. Returns text newly committed by this chunk."""
@@ -173,6 +180,11 @@ class StreamDecoder:
         norm, _, _ = dsp.normalise(self.env) if self.env.size else (self.env, 0, 0)
         # The repaired text is sent alongside the raw copy, never instead of it.
         # An operator has to be able to see what was actually heard.
+        # The model reads the whole window at once: it has no notion of
+        # committing, and re-reading is cheap enough not to need one.
+        if self.net.available and not self.quiet and self.env.size > 100:
+            norm, _, _ = dsp.normalise(self.env)
+            self.neural_text = self.net.decode(norm)
         toks, marks = guess.repair(self.committed[-600:])
         return {
             "pitch": round(self.pitch, 1) if self.pitch else None,
@@ -184,4 +196,7 @@ class StreamDecoder:
             "guessed": [{"w": w, "m": m} for w, m in zip(toks, marks)],
             "quiet": self.quiet,
             "bandwidth": round(self.bandwidth),
+            "neural": self.neural_text,
+            "neural_ok": self.net.available,
+            "neural_error": self.net.error,
         }

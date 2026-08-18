@@ -126,3 +126,95 @@ def snr_estimate(env):
     # cleanest audio available -- says the opposite of what is true.
     floor = max(lo, hi * 1e-3)
     return float(min(20 * np.log10(hi / floor), 60.0))
+
+
+def _reads_like_cw(text):
+    """Does this decode look like a station, or like noise?
+
+    Noise decoded at a threshold produces scattered single characters -- the
+    ones with the fewest elements, E and T and I -- separated by spaces, and
+    question marks where nothing matched. A station produces words. The
+    difference is stark enough to test directly, and it is the last thing
+    standing between a band scan and a list of frequencies where nothing is.
+    """
+    tokens = [t for t in text.split() if t]
+    if len(tokens) < 2:
+        return False
+    unknown = text.count("?") / max(len(text), 1)
+    if unknown > 0.25:
+        return False
+    singles = sum(1 for t in tokens if len(t) == 1)
+    if singles / len(tokens) > 0.5:
+        return False
+    return sum(len(t) for t in tokens) / len(tokens) >= 1.8
+
+
+def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
+                    min_db=16.0, min_wpm=8.0, max_wpm=55.0, min_chars=4):
+    """Every CW signal in the passband, with how confident we are in each.
+
+    With a wide filter one capture covers the whole passband, so a band scan can
+    step in kilohertz rather than hertz. The hard part is not finding tones, it
+    is not being fooled: an earlier version reported a signal at every frequency
+    it looked at, all at the same strength and all sending at an implausible
+    60 wpm.
+
+    The test applied is the strongest one available -- try to decode it. A tone
+    that yields characters at a human speed, with dahs about three times a dit,
+    is a station. Anything else is a carrier, a birdie, or noise. Reusing the
+    decoder also means the speed reported here is measured the same way as the
+    speed reported everywhere else, rather than by a second, worse method.
+    """
+    import classic
+    if len(audio) < rate:
+        return []
+    n = 8192
+    spec = np.zeros(n // 2 + 1)
+    frames = 0
+    for i in range(0, len(audio) - n, n // 2):
+        spec += np.abs(np.fft.rfft(audio[i:i + n] * np.hanning(n))) ** 2
+        frames += 1
+    if not frames:
+        return []
+    freqs = np.fft.rfftfreq(n, 1.0 / rate)
+    band = (freqs >= lo) & (freqs <= hi)
+    if not band.any():
+        return []
+    floor = float(np.median(spec[band])) or 1e-30
+
+    peaks = []
+    for i in np.where(band)[0][1:-1]:
+        if spec[i] <= spec[i - 1] or spec[i] <= spec[i + 1]:
+            continue
+        db = 10 * np.log10(spec[i] / floor)
+        if db >= min_db:
+            peaks.append((float(freqs[i]), float(db)))
+    peaks.sort(key=lambda t: -t[1])
+
+    found, taken = [], []
+    for hz, db in peaks:
+        if any(abs(hz - t) < 80 for t in taken):
+            continue                      # same signal, neighbouring bin
+        env = envelope(audio, hz, rate, bandwidth=cw_bandwidth(20))
+        snr = snr_estimate(env)
+        norm, _, _ = normalise(env)
+        text, info = classic.decode(norm)
+        wpm, ratio = info.get("wpm"), info.get("ratio")
+        letters = sum(c.isalnum() for c in text)
+        if not wpm or not ratio:
+            continue
+        if not (min_wpm <= wpm <= max_wpm):
+            continue
+        if not (1.7 <= ratio <= 4.5):      # real CW: a dah is about three dits
+            continue
+        if letters < min_chars:
+            continue
+        if not _reads_like_cw(text):
+            continue
+        taken.append(hz)
+        found.append({
+            "audio_hz": round(hz, 1), "db": round(db, 1), "snr": round(snr, 1),
+            "wpm": round(wpm, 1), "ratio": round(ratio, 2),
+            "chars": letters, "sample": text[:36],
+        })
+    return sorted(found, key=lambda s: -s["snr"])

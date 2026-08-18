@@ -26,7 +26,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 
 class State:
     def __init__(self):
-        self.decoder = stream.StreamDecoder()
+        self.decoder = stream.StreamDecoder()   # replaced at startup
         self.clients = set()
         self.source = "none"
         self.keyer = None
@@ -359,6 +359,8 @@ async def main():
     ap.add_argument("--keyline", default=None,
                     help="serial port for CW keying, e.g. /dev/ttyUSB1")
     ap.add_argument("--keyline-signal", default="dtr", choices=("dtr", "rts"))
+    ap.add_argument("--model", default="models/cw.onnx",
+                    help="trained decoder (ONNX); runs beside the classic one")
     ap.add_argument("--port", type=int, default=8074)
     ap.add_argument("--bind", default="0.0.0.0")
     a = ap.parse_args()
@@ -399,6 +401,10 @@ async def main():
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, a.bind, a.port).start()
+
+    ST.decoder = stream.StreamDecoder(model=str(Path(a.model).expanduser()))
+    print(f"  neural decoder: "
+          f"{'loaded ' + a.model if ST.decoder.net.available else ST.decoder.net.error}")
 
     call = ST.cfg.get("call", "")
     if call and call.upper() != "N0CALL":

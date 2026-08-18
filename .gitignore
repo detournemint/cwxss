@@ -4,3 +4,6 @@ models/*.pt
 data/arrl/*.mp3
 data/arrl/*.wav
 data/live/*.wav
+data/arrl/*.txt
+data/live/*.json
+models/*.onnx
