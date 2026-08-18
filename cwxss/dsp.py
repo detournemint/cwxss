@@ -162,7 +162,7 @@ def _reads_like_cw(text):
 
 def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
                     min_db=16.0, min_wpm=8.0, max_wpm=40.0, min_chars=8,
-                    net=None):
+                    net=None, require_language=True):
     """Every CW signal in the passband, with how confident we are in each.
 
     With a wide filter one capture covers the whole passband, so a band scan can
@@ -189,6 +189,20 @@ def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
     is to collect training audio for the model discards exactly the signals only
     the model can read -- the ones worth having. Either decoder producing
     language is enough.
+
+    `require_language=False` drops that last test and keeps anything that keys
+    like CW. It exists because the language test needs enough text to *be*
+    language -- three tokens or so -- and a band scan pausing four seconds on
+    each step collects one or two. The same signal that is found in twenty
+    seconds is invisible in four, whichever decoder reads it, so a scan that
+    demands language at every step cannot find anything at all:
+
+        4s   0 signals        15s  0 signals
+        20s  1 signal         25s  1 signal
+
+    A scan should therefore find candidates without it and re-listen to the
+    promising ones for long enough to apply it properly, which is what a human
+    tuning across a band does.
     """
     import classic
     if len(audio) < rate:
@@ -242,7 +256,7 @@ def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
             continue
         classic_ok = _reads_like_cw(text)
         neural_ok = bool(ntext) and _reads_like_cw(ntext)
-        if not (classic_ok or neural_ok):
+        if require_language and not (classic_ok or neural_ok):
             continue
         taken.append(hz)
         found.append({

@@ -308,6 +308,29 @@ class SignalFinding(unittest.TestCase):
             [])
 
 
+class TwoStageScan(unittest.TestCase):
+    """A scan finds candidates; confirming them is a separate, slower job."""
+
+    def test_noise_produces_no_candidates_even_without_the_language_test(self):
+        """The timing gates, not the language test, are what keep noise out of
+        the fast pass -- noise does not key at a human speed with a three to
+        one ratio. If that stopped being true the fast pass would flood."""
+        rng = np.random.default_rng(5)
+        for rms in (0.03, 0.10, 0.20):
+            a = (rng.standard_normal(8000 * 20) * rms).astype(np.float32)
+            self.assertEqual(
+                dsp.find_cw_signals(a, 8000, require_language=False), [])
+
+    def test_the_language_test_needs_more_than_a_scan_step(self):
+        """Measured on a real off-air station: found at 20 seconds, invisible
+        at 15 or fewer. A scan pausing four seconds per step cannot apply this
+        test, which is why the scan does not try to."""
+        a = synth.render("CQ POTA DE K6XSS K", wpm=22, pitch=640, snr_db=16,
+                         seed=2)
+        short = a[:int(3 * dsp.DEFAULT_RATE)]
+        self.assertEqual(dsp.find_cw_signals(short, dsp.DEFAULT_RATE), [])
+
+
 class SelfTraining(unittest.TestCase):
     """Pseudo-labels are only worth having if they are right."""
 

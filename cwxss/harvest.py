@@ -52,6 +52,10 @@ CHANNELS = {
     "60": (5332000, 5348000, 5358500, 5373000, 5405000),
 }
 RATE = 8000
+# How many of a band's candidates to re-listen to. The fast pass ranks them by
+# strength, and going deeper than this costs a minute each for steadily worse
+# odds.
+CANDIDATES = 4
 
 
 def rig(cmd, host="127.0.0.1", port=4532, wait=0.35):
@@ -142,7 +146,10 @@ def sweep(band, device, dwell, log, net=None):
         if not record(dwell, device, tmp):
             continue
         audio = read_wav(tmp)
-        for sig in dsp.find_cw_signals(audio, RATE, net=net):
+        # No language test on the fast pass: four seconds is not enough text
+        # to judge, so this stage only asks "does anything here key like CW".
+        for sig in dsp.find_cw_signals(audio, RATE, net=net,
+                                       require_language=False):
             sig["dial"] = freq
             sig["band"] = band + "m"
             found.append(sig)
@@ -220,16 +227,31 @@ async def main():
                 if not hits:
                     log(f"  {band}m: nothing")
                     continue
-                best = hits[0]
-                log(f"  {band}m: {len(hits)} signal(s), best "
-                    f"{best['dial']/1e6:.4f} at {best['snr']:.0f} dB")
-                rig(f"F {best['dial']}")
-                rig("M CW 500")
-                time.sleep(1)
-                tmp = Path("/tmp/cwxss-keep.wav")
-                if not record(a.record, a.device, tmp):
+                log(f"  {band}m: {len(hits)} candidate(s), listening properly")
+                # Re-listen to the best few for long enough that the language
+                # test means something. The fast pass deliberately let noise
+                # through; this is where it gets thrown out.
+                confirmed = None
+                for cand in hits[:CANDIDATES]:
+                    rig(f"F {cand['dial']}")
+                    rig("M CW 500")
+                    time.sleep(1)
+                    tmp = Path("/tmp/cwxss-keep.wav")
+                    if not record(a.record, a.device, tmp):
+                        continue
+                    audio = read_wav(tmp)
+                    real = dsp.find_cw_signals(audio, RATE, net=model)
+                    if not real:
+                        log(f"    {cand['dial']/1e6:.4f} was not a station")
+                        continue
+                    confirmed = dict(cand)
+                    confirmed.update(real[0])
+                    log(f"    {cand['dial']/1e6:.4f} confirmed "
+                        f"[{real[0].get('read_by')}] {real[0]['sample'][:30]!r}")
+                    break
+                if confirmed is None:
                     continue
-                audio = read_wav(tmp)
+                best = confirmed
                 out, meta = keep(audio, dict(best), a.out, model)
                 kept += 1
                 log(f"  kept {out.name}: classic {meta.get('classic','')[:44]!r}")
