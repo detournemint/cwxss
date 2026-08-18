@@ -144,6 +144,29 @@
       </div>
     </section>
     <section class="panel" style="margin-top:12px">
+      <h2>Log <span id="log-count" style="float:right;font-size:10px;
+        text-transform:none;letter-spacing:0;color:var(--dim)"></span></h2>
+      <div class="row" style="border-top:0;gap:6px">
+        <input type="text" id="rst-s" value="599" title="RST sent"
+               style="width:52px;min-width:0;text-align:center">
+        <input type="text" id="rst-r" value="599" title="RST received"
+               style="width:52px;min-width:0;text-align:center">
+        <input type="text" id="q-state" placeholder="st"
+               style="width:48px;min-width:0;text-align:center">
+        <input type="text" id="q-park" placeholder="their park"
+               style="flex:1;min-width:0">
+      </div>
+      <div class="row" style="border-top:0">
+        <button class="go" id="log-btn" style="flex:1">Log QSO</button>
+        <button id="unlog-btn" title="remove the last one">Undo</button>
+        <a href="/adif" download style="font-size:11px;color:var(--dim);
+           border-bottom:1px dotted #4a5666;text-decoration:none;align-self:center"
+           >ADIF</a>
+      </div>
+      <div id="log-list" style="padding:2px 13px 10px;font-family:var(--mono);
+        font-size:11px;color:var(--dim);max-height:150px;overflow-y:auto"></div>
+    </section>
+    <section class="panel" style="margin-top:12px">
       <h2>Who hears me <span id="rbn-at" style="float:right;font-size:10px;
         text-transform:none;letter-spacing:0;color:var(--dim)"></span></h2>
       <div class="kv"><span>skimmer spots (1h)</span><b id="rbn-n">—</b></div>
@@ -188,6 +211,22 @@ function drawSetSwitch(){
   document.querySelectorAll(".setbtn").forEach(b => {
     b.onclick = () => ws && ws.send(JSON.stringify({action:"macroset", set:b.dataset.s}));
   });
+}
+function setLog(l){
+  if (!l) return;
+  const s = l.summary || {};
+  // A park activation needs ten contacts, so show the progress toward it
+  // rather than only a running total.
+  $("#log-count").textContent = s.activated
+    ? `${s.today} today \u2713 activated`
+    : `${s.today} today \u2014 ${s.needed} to activate`;
+  $("#log-count").style.color = s.activated ? "var(--ok)" : "var(--dim)";
+  $("#log-list").innerHTML = (l.recent || []).map(q =>
+    `<div>${q.time.slice(0,2)}:${q.time.slice(2,4)} &nbsp;`
+    + `<b style="color:var(--fg)">${escapeHtml(q.call)}</b> &nbsp;${q.band||""} `
+    + `&nbsp;${q.rst_sent}/${q.rst_rcvd}${q.state ? " &nbsp;"+escapeHtml(q.state):""}`
+    + `${q.their_park ? " &nbsp;"+escapeHtml(q.their_park):""}</div>`).join("")
+    || "<div>nothing logged yet</div>";
 }
 function setRbn(r){
   if (!r) return;
@@ -337,7 +376,7 @@ function connect(){
       $("#s-key").textContent = canSend ? "ready" : "no radio";
       $("#s-key").style.color = canSend ? "var(--ok)" : "var(--dim)";
       ["#send-btn","#stop-btn"].forEach(s => $(s).disabled = !canSend);
-      setDecode(data.decode); setRbn(data.rbn);
+      setDecode(data.decode); setRbn(data.rbn); setLog(data.log);
     }
     else if (type === "decode") setDecode(data);
     else if (type === "truth")
@@ -345,13 +384,16 @@ function connect(){
         + escapeHtml(data.text) + "</b> at " + data.wpm + " wpm";
     else if (type === "cfg"){ cfg = data; drawMacros(); }
     else if (type === "rbn"){ setRbn(data); }
+    else if (type === "log"){ setLog(data); }
     else if (type === "wpm"){ wpm = data.wpm; $("#wpm-val").textContent = wpm+" wpm"; }
     else if (type === "sending"){
       $("#sending").className = data.text ? "on" : "";
       $("#sending-text").textContent = data.text || "";
     }
     else if (type === "ack"){
-      toast(data.who || (data.ok ? "ok" : "failed"), !data.ok);
+      // A dupe check with nothing to report should not interrupt anyone.
+      if (data.action === "dupe"){ if (data.who) toast(data.who, true); }
+      else toast(data.who || (data.ok ? "ok" : "failed"), !data.ok);
     }
   };
 }
@@ -386,7 +428,20 @@ document.addEventListener("keydown", e => {
   }
   if (e.key === "Escape") $("#stop-btn").click();     // always available
 });
+$("#log-btn").onclick = () => {
+  const call = $("#his").value.trim().toUpperCase();
+  if (!call){ toast("no callsign in the working box", true); return; }
+  ws && ws.send(JSON.stringify({action:"logqso", call,
+    sent: $("#rst-s").value, rcvd: $("#rst-r").value,
+    state: $("#q-state").value, their_park: $("#q-park").value}));
+  $("#q-park").value = "";
+};
+$("#unlog-btn").onclick = () => ws && ws.send(JSON.stringify({action:"unlog"}));
 $("#his").oninput = () => { drawMacros();
+  // Tell the operator about a dupe while they are typing, not after they have
+  // spent an over working someone they already have.
+  const c = $("#his").value.trim().toUpperCase();
+  if (c.length >= 4) ws && ws.send(JSON.stringify({action:"dupe", call:c}));
   ws && ws.send(JSON.stringify({action:"his", call: $("#his").value})); };
 drawMacros(); connect();
 addEventListener("resize", () => drawScope(null));

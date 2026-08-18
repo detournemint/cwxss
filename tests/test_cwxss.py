@@ -16,7 +16,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "cwxss"))
 
-import classic, config, dsp, guess, lexicon, morse, rbn, score, stream, synth  # noqa: E402
+import classic, config, dsp, guess, lexicon, morse, qsolog, rbn, score  # noqa: E402
+import stream, synth                                                       # noqa: E402
 
 
 class Timing(unittest.TestCase):
@@ -280,6 +281,71 @@ class Macros(unittest.TestCase):
             import importlib
             importlib.reload(config)
             Path(path).unlink(missing_ok=True)
+
+
+class QsoLog(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.path = tempfile.mktemp(suffix=".jsonl")
+        self.log = qsolog.Log(self.path)
+
+    def tearDown(self):
+        Path(self.path).unlink(missing_ok=True)
+
+    def test_a_contact_is_written_immediately(self):
+        """An activation ends when the battery does. A log held in memory is a
+        log you can lose."""
+        self.log.add("W1ABC", freq_hz=7030000)
+        self.assertTrue(Path(self.path).exists())
+        self.assertEqual(len(qsolog.Log(self.path).qsos), 1)
+
+    def test_nonsense_is_refused(self):
+        for bad in ("NOTACALL", "", "12345", "K"):
+            q, err = self.log.add(bad)
+            self.assertIsNone(q, bad)
+            self.assertTrue(err)
+
+    def test_real_callsigns_are_accepted(self):
+        for good in ("W1ABC", "K6XSS", "VE7XYZ", "G0ABC", "JA1XY", "W1ABC/7"):
+            self.assertTrue(qsolog.valid_call(good), good)
+
+    def test_a_dupe_is_the_same_station_same_band_same_day(self):
+        """Hunters chase an activator across bands all afternoon. Calling that
+        a dupe would refuse contacts that count."""
+        self.log.add("W1ABC", freq_hz=7030000)
+        self.assertEqual(len(self.log.worked("W1ABC", band="40m")), 1)
+        self.assertEqual(len(self.log.worked("W1ABC", band="20m")), 0)
+        self.assertEqual(len(self.log.worked("K5DXX", band="40m")), 0)
+
+    def test_activation_needs_ten(self):
+        for i in range(9):
+            self.log.add(f"W1AB{chr(65+i)}", freq_hz=7030000)
+        self.assertFalse(self.log.summary()["activated"])
+        self.assertEqual(self.log.summary()["needed"], 1)
+        self.log.add("K5DXX", freq_hz=7030000)
+        self.assertTrue(self.log.summary()["activated"])
+
+    def test_undo_removes_from_the_file_too(self):
+        self.log.add("W1ABC", freq_hz=7030000)
+        self.log.add("K5DXX", freq_hz=7030000)
+        self.log.remove_last()
+        self.assertEqual(len(qsolog.Log(self.path).qsos), 1)
+
+    def test_adif_is_well_formed_and_carries_the_pota_fields(self):
+        self.log.add("W1ABC", freq_hz=7030000, state="MA",
+                     my_park="US-1178", their_park="US-4567")
+        out = qsolog.adif(self.log.today(), "K6XSS", "US-1178")
+        self.assertIn("<EOH>", out)
+        self.assertEqual(out.count("<EOR>"), 1)
+        for field in ("<CALL:5>W1ABC", "<BAND:3>40m", "<MODE:2>CW",
+                      "<MY_SIG:4>POTA", "<MY_SIG_INFO:7>US-1178",
+                      "<SIG_INFO:7>US-4567", "<STATION_CALLSIGN:5>K6XSS"):
+            self.assertIn(field, out, field)
+
+    def test_band_is_derived_from_frequency(self):
+        for hz, band in ((7030000, "40m"), (14030000, "20m"),
+                         (3550000, "80m"), (999, "")):
+            self.assertEqual(qsolog.band_of(hz), band)
 
 
 class Rbn(unittest.TestCase):

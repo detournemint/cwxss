@@ -19,7 +19,7 @@ from aiohttp import web
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import capture, config, dtrkey, hamtext, keyer as keyer_mod  # noqa: E402
 import rbn as rbn_mod                                           # noqa: E402
-import stream, synth                                            # noqa: E402
+import qsolog, stream, synth                                    # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -36,6 +36,7 @@ class State:
         self.dtr = None            # keying by control line, when available
         self.rbn = None            # who is hearing us, from the skimmer network
         self.cfg = config.load()
+        self.log = qsolog.Log()
         self.his = ""              # the station being worked, for {his}
         # A rolling buffer of what we have just heard. Real off-air CW is worth
         # keeping the moment it appears -- by the time you have decided a signal
@@ -175,6 +176,7 @@ async def ws_handler(req):
         "keying": ("control line" if ST.dtr else "hamlib" if ST.keyer else "none"),
         "cfg": ST.cfg, "his": ST.his,
         "rbn": ST.rbn.state() if ST.rbn else None,
+        "log": {"summary": ST.log.summary(), "recent": ST.log.today()[-12:][::-1]},
         "build": build_id(),
         "decode": ST.decoder.state()}}))
     try:
@@ -252,6 +254,48 @@ async def ws_handler(req):
                     ok, who = True, f"saved {out.name} ({len(audio)/rate:.0f}s)"
                 await ws.send_str(json.dumps({"type": "ack", "data": {
                     "action": "save", "ok": ok, "who": who}}))
+            elif act == "logqso":
+                call = (req_msg.get("call") or ST.his or "").strip().upper()
+                freq = None
+                f = await rig_cmd_bound("f")
+                try:
+                    freq = int(f)
+                except (TypeError, ValueError):
+                    pass
+                q, err = ST.log.add(
+                    call, freq_hz=freq,
+                    rst_sent=req_msg.get("sent") or ST.cfg.get("rst", "599"),
+                    rst_rcvd=req_msg.get("rcvd") or "599",
+                    wpm=ST.decoder.info.get("wpm"),
+                    their_park=(req_msg.get("their_park") or "").strip().upper(),
+                    my_park=ST.cfg.get("park", ""),
+                    state=(req_msg.get("state") or "").strip().upper())
+                if q:
+                    ST.his = ""
+                    await ST.broadcast("his", {"call": ""})
+                    await ST.broadcast("log", {
+                        "summary": ST.log.summary(),
+                        "recent": ST.log.today()[-12:][::-1]})
+                n = ST.log.summary()
+                await ws.send_str(json.dumps({"type": "ack", "data": {
+                    "action": "logqso", "ok": bool(q),
+                    "who": err or (f"logged {call} \u2014 {n['today']} today"
+                                   + ("" if n["activated"]
+                                      else f", {n['needed']} more to activate"))}}))
+            elif act == "unlog":
+                q = ST.log.remove_last()
+                await ST.broadcast("log", {"summary": ST.log.summary(),
+                                           "recent": ST.log.today()[-12:][::-1]})
+                await ws.send_str(json.dumps({"type": "ack", "data": {
+                    "action": "unlog", "ok": bool(q),
+                    "who": f"removed {q['call']}" if q else "nothing to remove"}}))
+            elif act == "dupe":
+                call = (req_msg.get("call") or "").strip().upper()
+                band = qsolog.band_of(ST.decoder.info.get("dial") or 0)
+                prev = ST.log.worked(call) if call else []
+                await ws.send_str(json.dumps({"type": "ack", "data": {
+                    "action": "dupe", "ok": True,
+                    "who": (f"worked {call} {len(prev)}x today" if prev else "")}}))
             elif act == "his":
                 ST.his = (req_msg.get("call") or "").strip().upper()
                 await ST.broadcast("his", {"call": ST.his})
@@ -324,6 +368,17 @@ def build_id():
         return f"{int(st.st_mtime)}-{st.st_size}"
     except OSError:
         return "unknown"
+
+
+async def adif(req):
+    """The log as ADIF, which is what POTA and every logger wants."""
+    text = qsolog.adif(ST.log.today(), ST.cfg.get("call", ""),
+                       ST.cfg.get("park", ""))
+    stamp = ST.log.today()[0]["date"] if ST.log.today() else "empty"
+    return web.Response(
+        text=text, content_type="text/plain",
+        headers={"Content-Disposition":
+                 f'attachment; filename="cwxss-{stamp}.adi"'})
 
 
 async def index(req):
@@ -400,6 +455,7 @@ async def main():
     app = web.Application(middlewares=[no_cache_static])
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
+    app.router.add_get("/adif", adif)
     app.router.add_static("/static/", STATIC)
     runner = web.AppRunner(app)
     await runner.setup()
