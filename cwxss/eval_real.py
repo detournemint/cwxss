@@ -25,6 +25,24 @@ def load(path):
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0, rate
 
 
+def usable(text):
+    """Is this transcript actually text?
+
+    One ARRL download arrived as binary and scored the decoder at 8.7% against
+    it, which read as a catastrophic regression and was nothing of the kind --
+    the decode was "PL259 FORMAT CONNECTOR", perfectly good copy. A benchmark
+    that silently accepts a corrupt reference is worse than no benchmark: it
+    produces confident numbers that are wrong.
+    """
+    if not text or len(text) < 80:
+        return False
+    printable = sum(1 for c in text if c.isprintable() or c in "\r\n\t")
+    if printable / len(text) < 0.95:
+        return False
+    letters = sum(1 for c in text.upper() if c.isalpha())
+    return letters / len(text) > 0.4
+
+
 def clean(text):
     """Normalise a transcript for comparison.
 
@@ -65,8 +83,12 @@ def main():
         txt = wav.with_suffix(".txt")
         if not txt.exists():
             continue
+        raw = txt.read_text(errors="ignore")
+        if not usable(raw):
+            print(f"  {wav.stem.ljust(20)}skipped: transcript is not readable text")
+            continue
         audio, rate = load(wav)
-        truth = clean(txt.read_text(errors="ignore"))
+        truth = clean(raw)
         words = truth.split()
         seg = audio[a.skip * rate:(a.skip + a.seconds) * rate]
         if seg.size < rate:

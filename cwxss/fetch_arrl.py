@@ -23,15 +23,38 @@ BASE = "http://www.arrl.org"
 UA = "Mozilla/5.0 (X11; Linux x86_64) cwxss/evaluation"
 
 
-def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return r.read()
+def fetch(url, tries=3):
+    """Fetch, retrying. The archive is slow and times out fairly often."""
+    last = None
+    for attempt in range(tries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=90) as r:
+                return r.read()
+        except Exception as e:
+            last = e
+    raise last
+
+
+# Some speeds are served from a different host. Trying both is cheaper than
+# working out which, and the layout is identical.
+HOSTS = ["http://www.arrl.org", "http://www3.arrl.org", "http://arrl.org"]
 
 
 def archive_links(speed):
     """(mp3, txt) pairs for one speed, newest first."""
-    page = fetch(f"{BASE}/{speed}-wpm-code-archive").decode(errors="replace")
+    page = ""
+    for host in HOSTS:
+        for suffix in ("", "/"):
+            try:
+                page = fetch(f"{host}/{speed}-wpm-code-archive{suffix}").decode(
+                    errors="replace")
+            except Exception:
+                continue
+            if "Morse/Archive" in page:
+                break
+        if "Morse/Archive" in page:
+            break
     mp3s = re.findall(r'href="(/files/file/Morse/Archive/[^"]+\.mp3)"', page)
     pairs = []
     for m in mp3s:

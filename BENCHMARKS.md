@@ -39,18 +39,42 @@ ARRL W1AW code practice files, which come with exact transcripts. Machine-sent
 and studio-clean, so they are a test of reading text we did not write at speeds
 we did not choose, not a test of weak-signal work.
 
+Nine files, 5 to 40 wpm. ARRL publishes no archive for 25 or 35 wpm.
+
 | file | classic | neural |
 |---|---|---|
-| 20 wpm | 78.9% | 77.1% |
-| 30 wpm | 85.0% | 75.5% |
-| **5 wpm** (15 wpm chars, 3:1 Farnsworth) | **35.2%** | **53.3%** |
+| **5 wpm** (15 wpm chars, 3:1 Farnsworth) | 35.2% | **53.3%** |
+| **10 wpm** | 29.9% | **62.7%** |
 | 13 wpm | 71.1% | 68.4% |
 | 13 wpm (second) | 72.4% | 68.6% |
-| **mean** | **68.5%** | **68.6%** |
+| 15 wpm | 79.1% | 79.5% |
+| 18 wpm | 78.2% | 72.5% |
+| 20 wpm | **78.9%** | 77.1% |
+| 30 wpm | **85.0%** | 75.5% |
+| 40 wpm | **87.7%** | 80.4% |
+| **mean** | **68.6%** | **70.9%** |
 
-The classic decoder is still ahead at 20 and 30 wpm, where the timing is exact
-and there is nothing for a model to add. It collapses on the 5 wpm file, which
-is the Farnsworth case described in TODO.md.
+The split is clean and it is the useful result: **the model wins where the
+timing is irregular and the classic decoder wins where it is exact.** Below
+13 wpm ARRL sends heavy Farnsworth and the classic decoder puts a word break
+between every letter, scoring 30-35% with every letter correct. Above 20 wpm the
+timing is machine-exact, there is nothing for a model to add, and the classic
+decoder is ahead by 2 to 9 points.
+
+That argues for running both and choosing by measured regularity, rather than
+replacing one with the other.
+
+### The benchmark had a bug worth recording
+
+The first run of this expanded set scored the model at 8.7% on the 7.5 wpm file
+and put it behind the classic decoder overall. The decode was
+`PL259 FORMAT CONNECTOR` -- perfectly good copy. The transcript had downloaded
+as binary, and the model was being scored against nonsense.
+
+`eval_real.py` now checks that a reference is readable text before scoring
+against it. A benchmark that silently accepts a corrupt reference is worse than
+no benchmark: it produces confident numbers that are wrong, and it nearly caused
+a good model to be judged a regression.
 
 ## History
 
@@ -58,7 +82,8 @@ is the Farnsworth case described in TODO.md.
 |---|---|---|---|
 | initial | classic decoder only | 84.4% | 68.5% |
 | 4000 steps | first trained model | 96.1% | 66.1% |
-| 9000 steps | Farnsworth to 3.2:1, speeds from 8 wpm | **97.7%** | **68.6%** |
+| 9000 steps | Farnsworth to 3.2:1, speeds from 8 wpm | **97.7%** | 68.6% |
+| benchmark | expanded 5 real files to 9, fixed a corrupt reference | 97.7% | **70.9%** |
 
 The 4000-step model beat the classic decoder comfortably on synthetic while
 losing to it on real recordings -- a reminder that a model can win on its own
