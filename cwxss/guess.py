@@ -101,6 +101,69 @@ BIGRAMS = {
 }
 
 
+# How many dits in a row mean "forget that, I am sending it again". The
+# convention is eight, notated HH, but nobody counts and operators send five to
+# ten. Five is low enough to catch a hurried correction and high enough that no
+# real word reaches it.
+ERROR_DITS = 5
+
+
+def _dit_run(tok):
+    """Dits in a token that is nothing but dits, else None."""
+    return len(tok) if tok and set(tok) == {"E"} else None
+
+
+def strike_errors(tokens, marks):
+    """Apply the operator's own corrections to the transcript.
+
+    From a net control operator, describing why he runs a decoder at all:
+
+        Most often, CW ops will misspell a word, send a bunch of "Es", try
+        again, and then yet again and finally get it right - BUT by the time
+        they get the word spelled correctly I've forgotten the first part of
+        the sentence.
+
+    That is the whole feature. The error prosign is a run of dits, and a
+    decoder that prints it literally turns a fumbled word into a wall of Es
+    with the reader left to work out which attempt was the good one. Marking
+    the cancelled attempt instead means the sentence can still be read straight
+    through, with the retries visible but out of the way.
+
+    The cancelled word is kept rather than deleted. Someone reading back wants
+    to see what was tried -- a misspelling is often closer to the intended word
+    than the decoder's own guess at it.
+
+    Detection is deliberately narrow. A run of Es cannot be a word, and HH is
+    the written form of the prosign. Broader dit-only tests were tried and
+    rejected: SEE, HE, IS and SHE are all dits, and striking the word before
+    them would be worse than not having the feature.
+    """
+    out = list(marks)
+    i = 0
+    while i < len(tokens):
+        run = 0
+        j = i
+        while j < len(tokens) and _dit_run(tokens[j]) is not None:
+            run += _dit_run(tokens[j])
+            j += 1
+        if run < ERROR_DITS and tokens[i].upper() in ("HH", "HHH"):
+            run, j = ERROR_DITS, i + 1
+        if run >= ERROR_DITS:
+            for k in range(i, j):
+                out[k] = "cancel"
+            # Strike the attempt this cancels: the nearest earlier word that is
+            # not already struck, so a doubled correction walks back two words
+            # rather than striking the same one twice.
+            for k in range(i - 1, -1, -1):
+                if out[k] not in ("cancel", "struck"):
+                    out[k] = "struck"
+                    break
+            i = j
+            continue
+        i += 1
+    return out
+
+
 def repair(text):
     """Return (tokens, marks) where marks say how each token was arrived at.
 
@@ -144,7 +207,7 @@ def repair(text):
                 out.append(near[0]); marks.append("unsure")
             else:
                 out.append(tok); marks.append("copied")
-    return out, marks
+    return out, strike_errors(out, marks)
 
 
 def repair_text(text):

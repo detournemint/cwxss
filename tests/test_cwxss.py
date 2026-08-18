@@ -295,6 +295,67 @@ class SelfTraining(unittest.TestCase):
         self.assertFalse(dsp._reads_like_cw("EEI?E E? EESEI ITSEH TT E"))
 
 
+class ErrorProsign(unittest.TestCase):
+    """An operator cancelling a word and sending it again.
+
+    From a net control operator: "CW ops will misspell a word, send a bunch of
+    Es, try again... BUT by the time they get the word spelled correctly I've
+    forgotten the first part of the sentence."
+    """
+
+    def marks(self, text):
+        tok, mk = guess.repair(text)
+        return dict(zip(tok, mk)), tok, mk
+
+    def test_the_cancelled_word_is_struck(self):
+        _, tok, mk = self.marks("WX HR IS WEATNER EEEEEEEE WEATHER FB")
+        self.assertEqual(mk[tok.index("WEATNER")], "struck")
+        self.assertEqual(mk[tok.index("WEATHER")], "copied")
+
+    def test_dits_split_into_separate_tokens_still_count(self):
+        """Whether a run of dits arrives as one token or eight depends on how
+        the sender spaced them, which is not something to rely on."""
+        _, tok, mk = self.marks("RIG IS FT991 E E E E E E FT991A")
+        self.assertEqual(mk[tok.index("FT991")], "struck")
+
+    def test_hh_is_the_written_prosign(self):
+        _, tok, mk = self.marks("NAME IS BOB HH ROB")
+        self.assertEqual(mk[tok.index("BOB")], "struck")
+
+    def test_real_words_made_of_dits_are_left_alone(self):
+        """SEE, HE, IS and SHE are all dits. Striking the word before them
+        would be worse than not having the feature at all."""
+        _, tok, mk = self.marks("I SEE HE IS HIS SHE ES IT")
+        self.assertNotIn("struck", mk)
+
+    def test_a_signal_report_is_not_a_correction(self):
+        _, tok, mk = self.marks("UR RST 559 559 ES NAME")
+        self.assertNotIn("struck", mk)
+
+    def test_a_short_run_is_not_a_correction(self):
+        """Three dits is the letter S, or a decoder having a bad moment."""
+        _, tok, mk = self.marks("TNX FER EEE CALL")
+        self.assertNotIn("struck", mk)
+
+    def test_two_corrections_walk_back_two_words(self):
+        """They try, fail, try again, fail again. Each cancel has to strike a
+        different attempt or the transcript blames one word twice."""
+        _, tok, mk = self.marks("QTH IS PORTLNAD EEEEE PORTLND EEEEE PORTLAND")
+        self.assertEqual(mk[tok.index("PORTLNAD")], "struck")
+        self.assertEqual(mk[tok.index("PORTLND")], "struck")
+        self.assertEqual(mk[tok.index("PORTLAND")], "copied")
+
+
+class Sixty(unittest.TestCase):
+    def test_sixty_metres_is_channels_not_a_segment(self):
+        """Sweeping 5332-5405 in 2.5 kHz steps would spend almost all of it on
+        spectrum where no amateur may transmit."""
+        import harvest
+        self.assertIn("60", harvest.CHANNELS)
+        self.assertNotIn("60", harvest.SEGMENTS)
+        self.assertEqual(len(harvest.CHANNELS["60"]), 5)
+
+
 class Guessing(unittest.TestCase):
     def test_fills_a_single_missing_character(self):
         for token, want in (("R?GHT", "RIGHT"), ("SUN?Y", "SUNNY"),

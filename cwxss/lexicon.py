@@ -24,8 +24,17 @@ AM PM UTC LOCAL YRS OLD RETIRED HAM LICENSE YEARS AGO NEW OLD
 WORDS = [w for w in COMMON.split() if w]
 RANK = {w: i for i, w in enumerate(WORDS)}
 
+# Net traffic. A directed net has its own vocabulary and its own Q-signals,
+# and the net control operator is exactly the person who leaves a decoder
+# running -- he is copying a roster of stations rather than one conversation,
+# and cannot ask all of them to repeat.
+NET = ["NCS", "NET", "QNI", "QND", "QNS", "QNZ", "QRU", "QTC", "QSP",
+       "CHECK", "CHECKIN", "RELAY", "TRAFFIC", "ROSTER", "LIST", "STBY",
+       "WID", "THRU", "CLR", "LATE", "EARLY"]
+
 # Reports and other stock tokens that are not words but appear constantly.
 STOCK = ["5NN", "599", "579", "559", "588", "449", "339", "229", "119"]
+STOCK += NET
 for _s in STOCK:
     RANK.setdefault(_s, len(RANK))
 WORDS += STOCK

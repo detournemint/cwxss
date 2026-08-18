@@ -38,6 +38,19 @@ SEGMENTS = {
     "15": (21000000, 21070000), "12": (24890000, 24915000),
     "10": (28000000, 28070000),
 }
+
+# 60m is not a band, it is five channels. US amateurs share it with government
+# users on a secondary basis and are required to keep the emission centred on
+# the channel, so there is no segment to sweep -- stepping across it in 2.5 kHz
+# hops would spend almost all its time on spectrum where nobody is permitted to
+# transmit. These are the channel centres, which is where CW goes.
+#
+# It is listed here because the nets that run there are exactly the recordings
+# this harvester wants: scheduled, regular, and with a net control operator
+# calling the roster, so the callsigns are known in advance.
+CHANNELS = {
+    "60": (5332000, 5348000, 5358500, 5373000, 5405000),
+}
 RATE = 8000
 
 
@@ -114,13 +127,16 @@ def check_receiver(log):
 
 def sweep(band, device, dwell, log):
     """Step across a band's CW segment, returning what was found where."""
-    lo, hi = SEGMENTS[band]
+    if band in CHANNELS:
+        freqs = list(CHANNELS[band])
+    else:
+        lo, hi = SEGMENTS[band]
+        # A wide filter shows the whole passband at once, so the step can be
+        # kilohertz rather than hertz -- roughly one step per filter width.
+        freqs = list(range(lo, hi, 2500))
     found = []
     tmp = Path("/tmp/cwxss-sweep.wav")
-    # A wide filter shows the whole passband at once, so the step can be
-    # kilohertz rather than hertz -- roughly one step per filter width.
-    step = 2500
-    for freq in range(lo, hi, step):
+    for freq in freqs:
         rig(f"F {freq}")
         time.sleep(0.6)
         if not record(dwell, device, tmp):
@@ -190,7 +206,8 @@ async def main():
 
     end = time.time() + a.minutes * 60
     kept = 0
-    bands = [b.strip() for b in a.bands.split(",") if b.strip() in SEGMENTS]
+    known = set(SEGMENTS) | set(CHANNELS)
+    bands = [b.strip() for b in a.bands.split(",") if b.strip() in known]
     try:
         while time.time() < end:
             for band in bands:

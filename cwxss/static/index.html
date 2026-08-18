@@ -40,6 +40,14 @@
   .g-guessed{color:#8fd0ff;border-bottom:1px dotted #4aa3ff}
   .g-unsure{color:var(--warn);border-bottom:1px dotted var(--warn)}
   .g-unsure::after{content:"?";font-size:.7em;vertical-align:super;opacity:.8}
+  /* An operator who fumbles a word sends a run of dits and starts again. The
+     cancelled attempt is kept but struck, because someone reading back wants
+     to see what was tried -- a misspelling is often nearer the intended word
+     than any guess at it -- and the run of dits itself collapses to one mark,
+     so a sentence with three retries in it still reads as a sentence. */
+  .g-struck{color:var(--dim);text-decoration:line-through;opacity:.75}
+  .g-cancel{color:var(--dim);opacity:.6;font-size:.85em;
+            border:1px solid var(--line);border-radius:3px;padding:0 3px}
   .row{display:flex;align-items:center;gap:8px;padding:10px 13px;flex-wrap:wrap;
        border-top:1px solid var(--line)}
   button{background:#1b2330;border:1px solid #33404f;color:var(--fg);
@@ -317,9 +325,22 @@ function setDecode(d){
   }
   const g = $("#guessed");
   if (g.style.display !== "none" && d.guessed){
-    g.innerHTML = d.guessed.map(t => t.m === "copied"
-      ? escapeHtml(t.w)
-      : `<span class="g-${t.m}">${escapeHtml(t.w)}</span>`).join(" ");
+    // Collapse a run of cancel tokens to a single mark: the operator sent one
+    // correction, and printing "E E E E E E E E" restates the problem the
+    // feature exists to solve.
+    const parts = [];
+    d.guessed.forEach((t, i) => {
+      const prev = i ? d.guessed[i - 1] : null;
+      if (t.m === "cancel"){
+        if (!prev || prev.m !== "cancel")
+          parts.push('<span class="g-cancel" title="operator cancelled the '
+                     + 'previous word and sent it again">err</span>');
+        return;
+      }
+      parts.push(t.m === "copied" ? escapeHtml(t.w)
+                 : `<span class="g-${t.m}">${escapeHtml(t.w)}</span>`);
+    });
+    g.innerHTML = parts.join(" ");
     g.scrollTop = g.scrollHeight;
   }
 }
