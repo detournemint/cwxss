@@ -57,6 +57,10 @@ class State:
 ST = State()
 
 
+async def rig_cmd_bound(cmd):        # replaced at startup when --rig is given
+    return None
+
+
 async def rig_cmd(cmd, host="127.0.0.1", port=4532, timeout=6.0):
     """One command to rigctld. None if it cannot be reached."""
     try:
@@ -138,6 +142,29 @@ async def audio_source(device, rate=8000):
             proc.kill()
 
 
+async def watch_transmission(rig, seconds):
+    """Sample PTT and power while we key, so a send that produced no RF is
+    distinguishable from one nobody happened to hear.
+
+    "Sent 59 elements" only means the software toggled a line 59 times. Whether
+    the radio keyed, and whether any power came out, is a different question --
+    and it is the one that matters when the skimmers stay quiet.
+    """
+    keyed, watts = 0, 0.0
+    end = asyncio.get_event_loop().time() + seconds
+    while asyncio.get_event_loop().time() < end:
+        ptt = await rig("t")
+        if (ptt or "").strip() == "1":
+            keyed += 1
+            w = await rig("l RFPOWER_METER_WATTS")
+            try:
+                watts = max(watts, float(w))
+            except (TypeError, ValueError):
+                pass
+        await asyncio.sleep(0.25)
+    return keyed, watts
+
+
 async def ws_handler(req):
     ws = web.WebSocketResponse(heartbeat=25)
     await ws.prepare(req)
@@ -175,11 +202,24 @@ async def ws_handler(req):
                 else:
                     ST.sending = text
                     await ST.broadcast("sending", {"text": text})
+                    from morse import PARIS_UNITS, to_units
+                    secs = (sum(n for _, n in to_units(text)) * 60.0
+                            / (PARIS_UNITS * max(ST.wpm, 1)))
+                    watch = asyncio.create_task(
+                        watch_transmission(rig_cmd_bound, secs + 1))
                     ok, who = (await ST.dtr.send(text, ST.wpm) if ST.dtr
                                else await ST.keyer.send(text))
+                    keyed, watts = await watch
                     ST.sending = ""
                     await ST.broadcast("sending", {"text": ""})
-                print(f"[send] macro {i} {text!r} -> ok={ok} {who}", flush=True)
+                    if ok and keyed == 0:
+                        ok = False
+                        who = ("the key line moved but the radio never keyed — "
+                               "check menu 060 PC KEYING = DTR")
+                    elif ok:
+                        who = f"{who}, {watts:.0f} W out"
+                print(f"[send] macro {i} {text!r} -> ok={ok} {who} "
+                      f"(ptt seen {keyed if 'keyed' in dir() else '?'})", flush=True)
                 await ws.send_str(json.dumps({"type": "ack", "data": {
                     "action": "macro", "ok": ok, "who": who or text}}))
             elif act == "save":
@@ -339,6 +379,7 @@ async def main():
         host, _, port = a.rig.partition(":")
         async def cmd(c):
             return await rig_cmd(c, host, int(port or 4532))
+        globals()["rig_cmd_bound"] = cmd
         k = keyer_mod.Keyer(cmd, log=lambda m: print(m, flush=True))
         if await k.capable():
             ST.keyer = k

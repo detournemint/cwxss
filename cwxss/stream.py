@@ -40,7 +40,13 @@ class StreamDecoder:
         self.frame_rate = frame_rate
         self.window = int(window_s * frame_rate)
         self.env = np.zeros(0, dtype=np.float32)
-        self.audio_tail = np.zeros(0, dtype=np.float32)
+        # The window is kept as audio, not as envelope frames. The filter width
+        # follows the sending speed, and mixing frames measured at 80 Hz with
+        # frames measured at 60 Hz makes a window that is not a measurement of
+        # anything. Recomputing from audio costs one pass over 12 seconds of
+        # samples, which is nothing, and keeps the window consistent.
+        self.audio = np.zeros(0, dtype=np.float32)
+        self.audio_tail = np.zeros(0, dtype=np.float32)   # partial frame
         # Pitch detection needs a second or two of audio; chunks arriving live
         # are a fraction of that, so keep a rolling history to search in.
         self.audio_hist = np.zeros(0, dtype=np.float32)
@@ -55,6 +61,7 @@ class StreamDecoder:
         self.frames_dropped = 0
         self.read_to = 0
         self.quiet = "waiting for a signal"
+        self.bandwidth = 80.0
 
     def feed(self, audio):
         """Add audio. Returns text newly committed by this chunk."""
@@ -80,13 +87,21 @@ class StreamDecoder:
         if usable == 0:
             self.audio_tail = buf
             return ""
-        new = dsp.envelope(buf[:usable], self.pitch, self.rate,
-                           frame_rate=self.frame_rate)
         self.audio_tail = buf[usable:]
-        joined = np.concatenate([self.env, new])
-        if joined.size > self.window:
-            self.frames_dropped += joined.size - self.window
-        self.env = joined[-self.window:]
+        keep = int(self.window * self.rate / self.frame_rate)
+        before = self.audio.size
+        self.audio = np.concatenate([self.audio, buf[:usable]])[-keep:]
+        dropped_samples = max(0, before + usable - self.audio.size)
+        self.frames_dropped += dropped_samples // step
+
+        # Match the filter to the speed being sent. A wide filter admits the
+        # neighbouring station as well as the noise; on a busy band there may be
+        # half a dozen signals inside the radio's own filter, and this one was
+        # three times wider than a 20 wpm signal occupies.
+        self.bandwidth = dsp.cw_bandwidth(self.info.get("wpm"))
+        self.env = dsp.envelope(self.audio, self.pitch, self.rate,
+                                bandwidth=self.bandwidth,
+                                frame_rate=self.frame_rate)
         return self._reread()
 
     def _reread(self):
@@ -168,4 +183,5 @@ class StreamDecoder:
             "pending": self.pending,
             "guessed": [{"w": w, "m": m} for w, m in zip(toks, marks)],
             "quiet": self.quiet,
+            "bandwidth": round(self.bandwidth),
         }

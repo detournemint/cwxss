@@ -51,6 +51,14 @@
   input[type=text]{flex:1;min-width:180px;background:#11151a;border:1px solid
     var(--line);color:var(--fg);border-radius:7px;padding:9px 11px;
     font-family:var(--mono);font-size:15px;letter-spacing:.06em}
+  /* The macro-set chips. Without these the two labels render as one run of
+     grey text -- "potageneral" -- which is not a control anyone would find. */
+  .setbtn{display:inline-block;padding:3px 10px;margin-left:6px;border-radius:99px;
+          border:1px solid var(--line);background:#11151a;color:var(--dim);
+          cursor:pointer;font-size:10px;font-weight:600;text-transform:uppercase;
+          letter-spacing:.07em}
+  .setbtn:hover{color:var(--fg);border-color:#3d4a5a}
+  .setbtn.on{background:#1d3a5c;border-color:#2f6ea8;color:#dcecff}
   .macros{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding:11px 13px}
   .macros button{text-align:left;font-family:var(--mono);font-size:12px;
                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

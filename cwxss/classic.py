@@ -104,6 +104,30 @@ def text_of(chars):
     return "".join(c for c, _, _ in chars).strip()
 
 
+# A key-down shorter than this fraction of a dit is not an element. Noise
+# crossing the threshold for two or three frames was being read as E after E
+# between real words, which is most of what makes a decoder look useless.
+MIN_ELEMENT = 0.45
+
+
+def drop_blips(seq, dit):
+    """Remove key-downs too short to be elements, and close the gaps.
+
+    A blip has to be merged into the surrounding silence rather than deleted,
+    or the gaps either side of it read as two short gaps instead of one long
+    one -- turning a space between words into a space between characters.
+    """
+    out = []
+    for on, n in seq:
+        if on and n < dit * MIN_ELEMENT:
+            on = False                      # it was silence with a tick in it
+        if out and out[-1][0] == on:
+            out[-1] = (on, out[-1][1] + n)
+        else:
+            out.append((on, n))
+    return out
+
+
 def decode_chars(env, min_run=2, offset=0):
     """Envelope to timed characters. Returns ([(char, start, end)], info)."""
     level = threshold(env)
@@ -113,6 +137,11 @@ def decode_chars(env, min_run=2, offset=0):
     dit, dah = estimate_dit([n for on, n in seq if on])
     if not dit:
         return [], {"level": level, "dit": None, "wpm": None}
+    # Rejecting short key-downs as noise was tried here and made things worse:
+    # the dit estimate is itself derived partly from noise, so the threshold
+    # lands above some real dits and eats them. On live off-air audio it turned
+    # WARM DAY back into ?RM DAY and cost 6 points on clean synthetic. The
+    # measurement has to be trusted less, not filtered harder.
     from dsp import FRAME_RATE
     wpm = 60.0 / (50 * dit / FRAME_RATE)
     return decode_runs(seq, dit, offset), {

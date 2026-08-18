@@ -53,7 +53,22 @@ def _boxcar(x, n):
     return np.concatenate([np.full(n - 1, out[0] if len(out) else 0.0), out])
 
 
-def envelope(audio, pitch, rate=DEFAULT_RATE, bandwidth=200.0,
+def cw_bandwidth(wpm):
+    """How much spectrum a CW signal at this speed actually occupies.
+
+    Keying a carrier on and off spreads it either side of the tone by roughly
+    four times the element rate. At 20 wpm a dit is 60 ms, so about 17 elements
+    a second, so about 70 Hz -- and listening to any more than that is listening
+    to noise. Going from 200 Hz to 60 Hz on a real off-air signal was worth
+    10 dB, which is the difference between garbage and copy.
+    """
+    if not wpm or wpm <= 0:
+        return 80.0
+    elements_per_s = wpm * 50.0 / 60.0        # PARIS: 50 units per word
+    return float(max(35.0, min(160.0, 4.0 * elements_per_s)))
+
+
+def envelope(audio, pitch, rate=DEFAULT_RATE, bandwidth=60.0,
              frame_rate=FRAME_RATE):
     """Magnitude of the signal in a narrow band around `pitch`, decimated.
 
