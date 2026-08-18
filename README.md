@@ -95,33 +95,75 @@ Two things are needed and neither is obvious:
   from the factory, and with it off the software sends perfectly while no RF
   comes out at all
 
-## Prior art, and what was taken from it
+## Credits, prior art, and what was taken
 
-Neural CW decoding is not new. [morseangel](https://github.com/f4exb/morseangel),
-[DeepCW](https://github.com/e04/web-deep-cw-decoder),
-[deepmorse-decoder](https://github.com/ag1le/deepmorse-decoder) and
-[MorseNet](https://github.com/netom/MorseNet) all arrive at the same family --
-convolutions, a recurrent layer, CTC loss -- which is reassuring about the
-approach and unflattering about the novelty.
+Nothing here is unprecedented, and where an idea came from someone else it is
+named. No code or model weights from any of these projects are included.
+
+### Other CW decoders
+
+| project | licence | what it is |
+|---|---|---|
+| [f4exb/morseangel](https://github.com/f4exb/morseangel) | MIT | PyQt + PyTorch desktop decoder |
+| [e04/web-deep-cw-decoder](https://github.com/e04/web-deep-cw-decoder) · [engine](https://github.com/e04/deepcw-engine) | AGPL-3.0 | browser decoder, spectrogram input |
+| [ag1le/deepmorse-decoder](https://github.com/ag1le/deepmorse-decoder) · [LSTM_morse](https://github.com/ag1le/LSTM_morse) | GPL-3.0 | CNN-LSTM-CTC, 27.8 h training set |
+| [netom/MorseNet](https://github.com/netom/MorseNet) | — | RNN + CTC research |
+| [souryadey/morse-dataset](https://github.com/souryadey/morse-dataset) | — | synthetic Morse datasets for ML |
+| [flrig / fldigi](http://www.w1hkj.com/flrig-help/cw_keyer.html) | GPL | where the control-line keying approach comes from |
+
+**What was taken from DeepCW: the idea of not guessing.** Below about -6 dB it
+falls silent while ours produced `CQ GDTL DDXR RRI 5W` -- equally fluent whether
+reading a signal or noise. CTC reports a probability for every frame and we were
+discarding it. No code or weights were used: DeepCW is AGPL-3.0 and this is
+GPL-3.0, and adopting its model would extend network-use source disclosure to
+everyone running this.
+
+**What was taken from flrig and fldigi: how to key a radio.** They toggle a
+serial control line rather than relying on hamlib's `send_morse`, and having
+tried the alternative the reason is plain -- see the Keying section.
+
+### Research
+
+- **CTC** — Graves et al., *Connectionist Temporal Classification: Labelling
+  Unsegmented Sequence Data with Recurrent Neural Networks*, ICML 2006. What
+  makes it possible to train on (audio, text) pairs without ever labelling which
+  frame belongs to which character.
+- **Prefix beam search** — Graves & Jaitly 2014; Hannun's write-up of the
+  algorithm. Implemented in `beam.py`, with the CW vocabulary as the language
+  model. Measured here at about a point where the vocabulary matches and nothing
+  where it does not; the honest numbers are in that file's history.
+- **CCBC / DeepMorse** — the published Morse-recognition networks converge on
+  CNN + BiGRU + CTC, with attention added
+  ([DeepMorse](https://www.researchgate.net/publication/333793763_DeepMorse_A_Deep_Convolutional_Learning_Method_for_Blind_Morse_Signal_Detection_in_Wideband_Wireless_Spectrum),
+  [detection and recognition in wideband spectrum](https://www.researchgate.net/publication/363794531_Detection_and_recognition_based_on_machine_learning_and_deep_learning_for_Morse_signal_in_wide-band_wireless_spectrum)).
+  This project uses the same family without the attention module.
+- **Morse Code Datasets for Machine Learning** — Dey, Chugg & Beerel,
+  [arXiv:1807.04239](https://arxiv.org/pdf/1807.04239). Establishes what this
+  project also found: there is no public corpus of real labelled CW, so everyone
+  synthesises.
+- **Otsu's method** (1979) — used to split the envelope into key-down and
+  key-up in `classic.py`, in place of a fixed threshold.
+
+### Data and services
+
+- **[ARRL W1AW code practice files](http://www.arrl.org/code-practice-files)** —
+  the only readily available CW recordings with exact transcripts, used for
+  evaluation only. ARRL's material is not openly licensed: nothing fetched is
+  redistributed or trained on.
+- **[Reverse Beacon Network](https://reversebeacon.net/)** — skimmer spots of
+  your own callsign.
+- **[hamlib](https://hamlib.github.io/)** — CAT control.
+
+### How this compares
 
 Run head to head on identical clips, our 710 KB model and DeepCW's 15 MB one
 were level: identical on clean, weak, Farnsworth and QRN cases, DeepCW slightly
 ahead on a fading signal, ours ahead on a semi-automatic key.
 
-The difference worth having was not accuracy. Below about -6 dB DeepCW goes
-quiet while ours produced `CQ GDTL DDXR RRI 5W` -- equally fluent whether it was
-reading a signal or reading noise. **CTC reports a probability for every frame,
-and it is worth listening to.** The model now says how sure it is, and says
-nothing when it is not: confidence tracks accuracy closely, sitting at 0.97
-where the decode is perfect and 0.38 on noise.
-
-Gating the passage rather than each character matters. Dropping individual
-low-scoring characters cost 9 points during a deep fade, where confidence falls
-across the whole passage and the characters discarded are often right.
-
-What is different here is not the decoder. Those projects all decode only; this
-one keys a transmitter, and is a station -- rig control, macros, skimmer spots,
-band scanning -- that runs on a laptop in a park with no internet.
+What is different here is not the decoder, which is the least novel part of this
+project. Those projects all decode only. This one keys a transmitter, and is a
+station -- rig control, macros, skimmer spots, band scanning -- that runs on a
+laptop in a park with no internet.
 
 ## Training data
 
