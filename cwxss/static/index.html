@@ -104,7 +104,8 @@
         >show best guess</span>
         <span id="nn-toggle" style="float:right;font-size:10px;cursor:pointer;
         color:var(--accent);text-transform:none;letter-spacing:0;margin-right:12px"
-        >show model</span></h2>
+        >show model</span><span id="nn-conf" style="float:right;font-size:10px;
+        color:var(--dim);text-transform:none;letter-spacing:0;margin-right:8px"></span></h2>
       <div id="text"></div>
       <div id="neural" style="display:none;font-family:var(--mono);font-size:15px;
         line-height:1.7;padding:10px 14px;border-top:1px solid var(--line);
@@ -256,10 +257,21 @@ function setDecode(d){
   drawScope(d.envelope);
   const nn = $("#neural");
   if (nn.style.display !== "none"){
-    nn.textContent = d.neural_ok
-      ? (d.neural || "\u2014")
-      : ("model not loaded: " + (d.neural_error || "unknown"));
+    if (!d.neural_ok){
+      nn.textContent = "model not loaded: " + (d.neural_error || "unknown");
+    } else if (d.neural){
+      nn.textContent = d.neural;
+      nn.style.opacity = "1";
+    } else {
+      // The model reports how sure it is. Saying nothing, and saying why, is
+      // more use than a fluent guess an operator cannot check.
+      nn.textContent = "\u2014 not confident enough to read this ("
+                     + Math.round((d.neural_conf || 0) * 100) + "%)";
+      nn.style.opacity = ".55";
+    }
   }
+  if (d.neural_ok && d.neural_conf != null)
+    $("#nn-conf").textContent = Math.round(d.neural_conf * 100) + "%";
   const g = $("#guessed");
   if (g.style.display !== "none" && d.guessed){
     g.innerHTML = d.guessed.map(t => t.m === "copied"

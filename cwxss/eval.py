@@ -98,6 +98,7 @@ def main():
             with torch.no_grad():
                 x = torch.from_numpy(np.asarray(env, dtype=np.float32))[None]
                 return M.decode_greedy(net(x)[0])
+
         decoders["neural"] = neural
         names.append("neural")
 

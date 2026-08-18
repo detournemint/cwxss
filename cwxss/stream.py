@@ -69,6 +69,7 @@ class StreamDecoder:
         # not, so showing both lets the operator see which to believe.
         self.net = neural.NeuralDecoder(model)
         self.neural_text = ""
+        self.neural_conf = 0.0
 
     def feed(self, audio):
         """Add audio. Returns text newly committed by this chunk."""
@@ -184,7 +185,7 @@ class StreamDecoder:
         # committing, and re-reading is cheap enough not to need one.
         if self.net.available and not self.quiet and self.env.size > 100:
             norm, _, _ = dsp.normalise(self.env)
-            self.neural_text = self.net.decode(norm)
+            self.neural_text, self.neural_conf = self.net.decode_scored(norm)
         toks, marks = guess.repair(self.committed[-600:])
         return {
             "pitch": round(self.pitch, 1) if self.pitch else None,
@@ -197,6 +198,7 @@ class StreamDecoder:
             "quiet": self.quiet,
             "bandwidth": round(self.bandwidth),
             "neural": self.neural_text,
+            "neural_conf": round(self.neural_conf, 2),
             "neural_ok": self.net.available,
             "neural_error": self.net.error,
         }

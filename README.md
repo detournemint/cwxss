@@ -95,6 +95,34 @@ Two things are needed and neither is obvious:
   from the factory, and with it off the software sends perfectly while no RF
   comes out at all
 
+## Prior art, and what was taken from it
+
+Neural CW decoding is not new. [morseangel](https://github.com/f4exb/morseangel),
+[DeepCW](https://github.com/e04/web-deep-cw-decoder),
+[deepmorse-decoder](https://github.com/ag1le/deepmorse-decoder) and
+[MorseNet](https://github.com/netom/MorseNet) all arrive at the same family --
+convolutions, a recurrent layer, CTC loss -- which is reassuring about the
+approach and unflattering about the novelty.
+
+Run head to head on identical clips, our 710 KB model and DeepCW's 15 MB one
+were level: identical on clean, weak, Farnsworth and QRN cases, DeepCW slightly
+ahead on a fading signal, ours ahead on a semi-automatic key.
+
+The difference worth having was not accuracy. Below about -6 dB DeepCW goes
+quiet while ours produced `CQ GDTL DDXR RRI 5W` -- equally fluent whether it was
+reading a signal or reading noise. **CTC reports a probability for every frame,
+and it is worth listening to.** The model now says how sure it is, and says
+nothing when it is not: confidence tracks accuracy closely, sitting at 0.97
+where the decode is perfect and 0.38 on noise.
+
+Gating the passage rather than each character matters. Dropping individual
+low-scoring characters cost 9 points during a deep fade, where confidence falls
+across the whole passage and the characters discarded are often right.
+
+What is different here is not the decoder. Those projects all decode only; this
+one keys a transmitter, and is a station -- rig control, macros, skimmer spots,
+band scanning -- that runs on a laptop in a park with no internet.
+
 ## Training data
 
 There is no public corpus of real, labelled, off-air CW. Every project in this
