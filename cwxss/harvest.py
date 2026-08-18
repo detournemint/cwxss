@@ -71,6 +71,47 @@ def read_wav(path):
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
 
 
+def check_receiver(log):
+    """Is the front end actually switched on?
+
+    A power cycle resets the preamp on some rigs, and on the higher bands that
+    leaves the receiver deaf without anything looking wrong: the S-meter reads a
+    steady floor, the audio is clean, and nothing decodes. Measured on an
+    FT-991A after a power cycle, 20m read -54 dB with the preamp off and -8 dB
+    with it on. Forty-six decibels of receiver, silently unused.
+
+    Comparing the noise floor with the preamp off and on says whether an
+    antenna is connected as well: with no antenna the preamp lifts almost
+    nothing.
+    """
+    def floor():
+        vals = []
+        for _ in range(3):
+            v = rig("l STRENGTH")
+            try:
+                vals.append(int(float(v)))
+            except (TypeError, ValueError):
+                pass
+            time.sleep(0.6)
+        return max(vals) if vals else None
+
+    rig("L PREAMP 0"); time.sleep(1.5)
+    off = floor()
+    rig("L PREAMP 20"); time.sleep(1.5)
+    on = floor()
+    if off is None or on is None:
+        log("  receiver check: no S-meter reading")
+        return
+    lift = on - off
+    log(f"  receiver: noise floor {off} dB without preamp, {on} dB with it "
+        f"({lift:+d} dB)")
+    if lift < 6:
+        log("  WARNING: the preamp barely changes the noise floor. That usually "
+            "means no antenna is connected.")
+    else:
+        log("  antenna is connected; leaving the preamp on")
+
+
 def sweep(band, device, dwell, log):
     """Step across a band's CW segment, returning what was found where."""
     lo, hi = SEGMENTS[band]
@@ -144,6 +185,8 @@ async def main():
         f"model {'loaded' if model.available else model.error}")
     before = rig("f"), rig("m")
     log(f"  restoring to {before} when done")
+
+    check_receiver(log)
 
     end = time.time() + a.minutes * 60
     kept = 0

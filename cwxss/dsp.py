@@ -131,26 +131,37 @@ def snr_estimate(env):
 def _reads_like_cw(text):
     """Does this decode look like a station, or like noise?
 
-    Noise decoded at a threshold produces scattered single characters -- the
-    ones with the fewest elements, E and T and I -- separated by spaces, and
-    question marks where nothing matched. A station produces words. The
-    difference is stark enough to test directly, and it is the last thing
-    standing between a band scan and a list of frequencies where nothing is.
+    An earlier version tested only the shape of the text -- how many single
+    characters, how many question marks -- and a band sweep reported forty
+    signals where there were none. Noise decoded at a threshold happily
+    produces multi-character tokens: 'EEI?E E? EESEI ITSEH' passes every
+    structural test and means nothing.
+
+    So test the content. Real CW is made of a small vocabulary and callsigns,
+    and noise contains neither. A station sending anything at all will produce
+    some recognisable token within a few seconds; forty seconds of noise will
+    not produce one.
     """
-    tokens = [t for t in text.split() if t]
-    if len(tokens) < 2:
+    import re
+    from lexicon import WORDS
+    vocab = set(WORDS)
+    call = re.compile(r"^[A-Z0-9]{1,3}\d[A-Z]{1,4}$")
+
+    tokens = [t.strip(".,?=/+-") for t in text.upper().split()]
+    tokens = [t for t in tokens if t]
+    if len(tokens) < 3:
         return False
-    unknown = text.count("?") / max(len(text), 1)
-    if unknown > 0.25:
+    if text.count("?") / max(len(text), 1) > 0.15:
         return False
     singles = sum(1 for t in tokens if len(t) == 1)
-    if singles / len(tokens) > 0.5:
+    if singles / len(tokens) > 0.4:
         return False
-    return sum(len(t) for t in tokens) / len(tokens) >= 1.8
+    known = sum(1 for t in tokens if t in vocab or call.match(t))
+    return known >= 2 and known / len(tokens) >= 0.15
 
 
 def find_cw_signals(audio, rate=DEFAULT_RATE, lo=300.0, hi=2700.0,
-                    min_db=16.0, min_wpm=8.0, max_wpm=55.0, min_chars=4):
+                    min_db=16.0, min_wpm=8.0, max_wpm=40.0, min_chars=8):
     """Every CW signal in the passband, with how confident we are in each.
 
     With a wide filter one capture covers the whole passband, so a band scan can
