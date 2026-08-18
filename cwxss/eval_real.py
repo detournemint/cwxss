@@ -15,6 +15,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import classic, dsp, guess, neural, score      # noqa: E402
+from stream import STRETCH_PREFER_NEURAL       # noqa: E402
 
 
 def load(path):
@@ -76,8 +77,13 @@ def main():
 
     net = neural.NeuralDecoder(a.model)
     print(f"  model: {'loaded' if net.available else net.error}\n")
-    print("  " + "file".ljust(20) + "classic   neural   guess")
-    print("  " + "-" * 48)
+    # The third column is what the station actually shows. stream.py runs both
+    # decoders and picks between them on measured gap stretch, and that choice
+    # is worth more than either decoder alone -- so a benchmark that reports
+    # only the two fixed choices is not measuring the product. The threshold is
+    # imported rather than repeated, so this cannot drift away from the code.
+    print("  " + "file".ljust(20) + "classic   neural   chosen  stretch")
+    print("  " + "-" * 56)
     rows = []
     for wav in sorted(Path(a.dir).glob("*.wav")):
         txt = wav.with_suffix(".txt")
@@ -100,19 +106,30 @@ def main():
         norm, _, _ = dsp.normalise(env)
         c_text, info = classic.decode(norm)
         n_text = net.decode(norm) if net.available else ""
-        g_text = " ".join(guess.repair(c_text)[0])
         c, _ = best_offset(words, c_text)
         n, _ = best_offset(words, n_text) if n_text else (0.0, 0)
-        g, _ = best_offset(words, g_text)
+
+        level = classic.threshold(norm)
+        seq = [r for r in classic.runs(norm, level) if r[1] >= 2]
+        stretch = classic.gap_stretch(seq, info.get("dit"))
+        picked_neural = bool(n_text) and stretch >= STRETCH_PREFER_NEURAL
+        g = n if picked_neural else c
         rows.append((wav.stem, c, n, g, info.get("wpm")))
-        print(f"  {wav.stem.ljust(20)}{c*100:6.1f}%  {n*100:6.1f}%  {g*100:6.1f}%"
-              f"   ({info.get('wpm')} wpm)")
+        mark = "*" if picked_neural else " "
+        print(f"  {wav.stem.ljust(20)}{c*100:6.1f}%  {n*100:6.1f}%  {g*100:6.1f}%{mark}"
+              f"  {stretch:5.2f}  ({info.get('wpm')} wpm)")
     if rows:
-        print("  " + "-" * 48)
+        print("  " + "-" * 56)
         print(f"  {'mean'.ljust(20)}"
               f"{np.mean([r[1] for r in rows])*100:6.1f}%  "
               f"{np.mean([r[2] for r in rows])*100:6.1f}%  "
               f"{np.mean([r[3] for r in rows])*100:6.1f}%")
+        print("\n  * chose the model. Selection beats always-classic by "
+              f"{(np.mean([r[3] for r in rows]) - np.mean([r[1] for r in rows]))*100:.1f} "
+              "points and always-model by "
+              f"{(np.mean([r[3] for r in rows]) - np.mean([r[2] for r in rows]))*100:.1f}, "
+              f"against an oracle of "
+              f"{np.mean([max(r[1], r[2]) for r in rows])*100:.1f}%.")
 
 
 if __name__ == "__main__":

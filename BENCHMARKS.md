@@ -54,6 +54,35 @@ Nine files, 5 to 40 wpm. ARRL publishes no archive for 25 or 35 wpm.
 | 40 wpm | **87.7%** | 80.4% |
 | **mean** | **68.6%** | **70.9%** |
 
+### Choosing between them
+
+Neither decoder wins outright. The classic one is ahead on every file sent at
+standard timing and the model is ahead by 18 and 33 points on the two sent with
+heavy Farnsworth spacing, so committing to either throws away most of what the
+other knows. `stream.py` measures the ratio of gap length to dit length and
+prefers the model above `STRETCH_PREFER_NEURAL`.
+
+| strategy | mean |
+|---|---|
+| always classic | 68.6% |
+| always the model | 70.9% |
+| **choose on measured gap stretch** | **74.3%** |
+| oracle: the better decoder on each file | 74.3% |
+
+The choice reaches the oracle on this corpus -- it picks correctly on all nine
+files. The measured separation is wide, standard timing landing at 2.0-3.7 and
+Farnsworth at 6.1 and 16.6, and the threshold sweep is flat across it:
+
+| threshold | 2.5 | 3.0 | 3.5 | **4.5** | 5.0 | 6.0 |
+|---|---|---|---|---|---|---|
+| mean | 84.0% | 84.2% | 84.2% | **84.5%** | 84.5% | 84.5% |
+
+(measured over 120 s per file rather than the 45 s the table above uses, which
+is why the absolute numbers are higher; the ordering is what matters.)
+
+Anywhere from 4 to 6 gives the same answer, so the setting is not tuned to this
+corpus in any way that could be expected to break on another one.
+
 The split is clean and it is the useful result: **the model wins where the
 timing is irregular and the classic decoder wins where it is exact.** Below
 13 wpm ARRL sends heavy Farnsworth and the classic decoder puts a word break

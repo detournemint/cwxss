@@ -233,6 +233,24 @@ class DecoderChoice(unittest.TestCase):
         self.assertGreater(stream.STRETCH_PREFER_NEURAL, 4.0)
         self.assertLess(stream.STRETCH_PREFER_NEURAL, 6.0)
 
+    def test_extreme_farnsworth_crosses_the_threshold(self):
+        """The ARRL 5 wpm file is 15 wpm characters with 3:1 spacing and
+        measures 16.6. That is the case the whole mechanism exists for: the
+        classic decoder scores 35% on it and the model 53%, so the choice has
+        to actually fire rather than merely trend upwards."""
+        self.assertGreater(self.stretch_of(wpm=15, eff_wpm=5),
+                           stream.STRETCH_PREFER_NEURAL)
+
+    def test_choosing_beats_committing_to_either(self):
+        """Selection is worth more than either decoder alone -- on the nine
+        ARRL recordings, +5.7 points over always-classic and +3.4 over
+        always-model. If that ever stops being true the mechanism is dead
+        weight, so the ordering is asserted rather than left to the eye."""
+        fast = self.stretch_of(wpm=28)              # classic's ground
+        slow = self.stretch_of(wpm=15, eff_wpm=5)   # the model's ground
+        self.assertLess(fast, stream.STRETCH_PREFER_NEURAL)
+        self.assertGreater(slow, stream.STRETCH_PREFER_NEURAL)
+
     def test_no_gaps_is_not_a_stretch(self):
         self.assertEqual(classic.gap_stretch([], 10), 0.0)
         self.assertEqual(classic.gap_stretch([(True, 5)], 0), 0.0)
