@@ -22,7 +22,14 @@ INV = {i + 1: c for i, c in enumerate(ALPHABET)}
 
 
 class NeuralDecoder:
-    def __init__(self, path="models/cw.onnx"):
+    def __init__(self, path="models/cw.onnx", beam=False, lm_weight=0.6):
+        # Beam search with the CW vocabulary as a prior. Off by default: on
+        # material that matches the vocabulary it is worth about a point, and on
+        # general prose -- ARRL practice text is articles from QST -- it is
+        # worth nothing at all, while costing 90 times the decoding time. It is
+        # here because on-air exchanges are exactly the case it helps.
+        self.beam = beam
+        self.lm_weight = lm_weight
         self.path = Path(path)
         self.sess = None
         self.error = ""
@@ -75,6 +82,13 @@ class NeuralDecoder:
         except Exception as e:
             self.error = f"{type(e).__name__}"
             return "", 0.0
+
+        if self.beam:
+            import beam as beam_mod
+            text = beam_mod.decode(logprobs, INV, blank=BLANK,
+                                   lm_weight=self.lm_weight)
+            conf = float(np.mean(np.exp(logprobs.max(axis=-1))))
+            return (text if conf >= min_confidence else ""), conf
 
         best = logprobs.argmax(axis=-1)
         conf = np.exp(logprobs.max(axis=-1))        # the model exports log-probs

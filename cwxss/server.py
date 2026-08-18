@@ -359,6 +359,9 @@ async def main():
     ap.add_argument("--keyline", default=None,
                     help="serial port for CW keying, e.g. /dev/ttyUSB1")
     ap.add_argument("--keyline-signal", default="dtr", choices=("dtr", "rts"))
+    ap.add_argument("--beam", action="store_true",
+                    help="beam search with the CW vocabulary; slower, helps on "
+                         "on-air exchanges, not on prose")
     ap.add_argument("--model", default="models/cw.onnx",
                     help="trained decoder (ONNX); runs beside the classic one")
     ap.add_argument("--port", type=int, default=8074)
@@ -403,6 +406,9 @@ async def main():
     await web.TCPSite(runner, a.bind, a.port).start()
 
     ST.decoder = stream.StreamDecoder(model=str(Path(a.model).expanduser()))
+    if a.beam and ST.decoder.net.available:
+        ST.decoder.net.beam = True
+        print("  beam search enabled")
     print(f"  neural decoder: "
           f"{'loaded ' + a.model if ST.decoder.net.available else ST.decoder.net.error}")
 
