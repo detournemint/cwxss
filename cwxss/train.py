@@ -40,23 +40,31 @@ def make_clip(rng, wpm=None, snr=None, fist=None, text=None, pitch=None,
     # operators it will actually meet.
     eff = None
     if rng.random() < 0.40:
-        # Out to a 7:1 ratio, sampled with the mass held low.
+        # Up to a 3:1 ratio. ARRL sends its 5 wpm practice as 15 wpm characters
+        # with enormous gaps, and a model that has only seen 2:1 reads the gaps
+        # as word breaks -- 35% on a file that is otherwise pristine. Beginners
+        # are taught this way and a great many of them send this way.
         #
-        # A 3.2:1 cap was not enough, and the measurement says why. Sending
-        # ratio is not the same quantity as the gap stretch the decoder sees:
+        # Widening this to 7:1 was tried and reverted. It looked obviously
+        # right: the ARRL 5 wpm file measures a gap stretch of 16.6 and this
+        # cap tops out at 8.9, so the model had demonstrably never seen the
+        # case it was failing on. Training it on that case made it worse, and
+        # worse on the target rather than merely elsewhere:
         #
-        #     1.5:1 -> 4.2      3.2:1 ->  8.9      6:1 -> 16.9
+        #     5 wpm file    53.3% -> 50.0%
+        #     10 wpm file   62.7% -> 55.7%
+        #     synthetic     97.7% -> 96.4%
+        #     real, chosen  74.3% -> 73.1%
         #
-        # The ARRL 5 wpm practice file measures 16.6, which is a 6:1 send. The
-        # old cap topped out at 8.9, so the model had never seen anything like
-        # it, read the gaps as the end of the transmission, and scored 53% on a
-        # recording that is otherwise pristine.
+        # The reading is that 179,757 parameters and 9000 steps is a fixed
+        # budget, and spreading it over a wider distribution buys coverage by
+        # spending depth. The thin tail out at 6:1 was too sparse to learn from
+        # while still diluting the middle, so everything got slightly worse and
+        # the extreme case got worse fastest.
         #
-        # Squaring a uniform keeps most clips near 1-2:1, where most operators
-        # actually live, and puts a thin tail out at the beginner-tape spacing.
-        # Sampling this range flat would teach the model that enormous gaps are
-        # ordinary and cost accuracy on everything sent at standard timing.
-        eff = wpm / float(1.05 + 5.95 * rng.random() ** 2)
+        # A future attempt should add capacity or steps before adding spread,
+        # and should oversample the extreme rather than reach it with a tail.
+        eff = wpm / float(rng.uniform(1.05, 3.2))
     # Static crashes on a quarter, because a threshold detector reads a
     # lightning burst as key-down and the model needs to learn not to.
     qrn = float(rng.uniform(0.5, 4.0)) if rng.random() < 0.25 else 0.0
