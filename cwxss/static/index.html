@@ -210,6 +210,7 @@
 <script>
 const $ = s => document.querySelector(s);
 let ws, canSend = false, wpm = 20, cfg = {messages: []}, loadedBuild = null;
+let lastDecode = null;   // so a pane opened between decodes can fill
 
 // Placeholders are filled in on the server at the moment of sending, so what
 // is shown here is the template. The station being worked comes from the
@@ -424,9 +425,10 @@ function connect(){
       $("#s-key").textContent = canSend ? "ready" : "no radio";
       $("#s-key").style.color = canSend ? "var(--ok)" : "var(--dim)";
       ["#send-btn","#stop-btn"].forEach(s => $(s).disabled = !canSend);
+      lastDecode = data.decode || lastDecode;
       setDecode(data.decode); setRbn(data.rbn); setLog(data.log);
     }
-    else if (type === "decode") setDecode(data);
+    else if (type === "decode"){ lastDecode = data; setDecode(data); }
     else if (type === "truth")
       $("#truth").innerHTML = "demo signal, actually sent: <b>"
         + escapeHtml(data.text) + "</b> at " + data.wpm + " wpm";
@@ -450,11 +452,16 @@ $("#nn-toggle").onclick = () => {
   const g = $("#neural"), on = g.style.display === "none";
   g.style.display = on ? "block" : "none";
   $("#nn-toggle").textContent = on ? "hide model" : "show model";
+  if (on && lastDecode) setDecode(lastDecode);
 };
 $("#guess-toggle").onclick = () => {
   const g = $("#guessed"), on = g.style.display === "none";
   g.style.display = on ? "block" : "none";
   $("#guess-toggle").textContent = on ? "hide best guess" : "show best guess";
+  // These panes only draw while they are open, so one opened between decodes
+  // stayed blank until the next character arrived -- which on a quiet band is
+  // a long time to look at an empty box you just asked for.
+  if (on && lastDecode) setDecode(lastDecode);
 };
 $("#send-btn").onclick = () => { send($("#send").value); $("#send").value = ""; };
 $("#send").onkeydown = e => {

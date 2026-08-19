@@ -65,6 +65,8 @@ def check_setup():
 def main():
     results = [
         ("python", run("python", [sys.executable, "tests/test_cwxss.py"])),
+        ("interface", run("interface",
+                          [sys.executable, "tests/test_browser.py"])),
         ("page", check_page()),
         ("setup.sh", check_setup()),
     ]
