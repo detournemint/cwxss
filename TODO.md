@@ -195,6 +195,13 @@ Things tried and rejected, so they are not tried again:
   were written against a heading that did not exist and silently did nothing,
   while the script reported success. The same bug had already cost a CSS rule
   earlier. Any scripted edit must assert that the text changed.
+- **Smoothing the gap-stretch measurement.** Streamed, the measurement varies
+  a lot on heavily Farnsworth-spaced sending -- standard deviation 4 to 6
+  between windows, against under 0.25 for everything sent normally -- because a
+  twelve-second window may or may not contain a long gap. An exponential
+  average across windows widens the separation between the two groups from 2.29
+  to 2.40, which does not justify carrying the state. The separation is already
+  wide enough that no file crosses the threshold.
 - **Per-character confidence gating.** Dropping individual low-scoring
   characters cost 9 points during a deep fade: confidence falls across the whole
   passage and the characters discarded there are often right. Gating the passage

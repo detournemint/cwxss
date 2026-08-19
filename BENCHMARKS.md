@@ -80,6 +80,38 @@ will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
 
+### The threshold, checked the way the station runs
+
+The decoder choice was tuned on whole-file decodes, and the station streams. Once
+the model started accumulating, that gap was worth closing: the quantity the
+threshold tests is measured on a twelve-second window, not on a whole recording,
+and those are not the same number.
+
+    file            whole-file    streaming
+    260107_05WPM       16.55         7.00
+    260204_05WPM       16.67        15.59
+    260107_10WPM        6.11         5.98
+
+A window often does not contain the long gaps, so streaming reads lower and
+varies far more -- the 5 wpm files swing with a standard deviation of 4 to 6
+between windows, where every normal-speed file sits under 0.25.
+
+The threshold survives anyway, and the sweep run under streaming picks the same
+answer:
+
+| T | 2.5 | 3.0 | 4.0 | **4.5** | 5.0 | 6.0 |
+|---|---|---|---|---|---|---|
+| mean | 84.0% | 84.0% | 84.5% | **84.5%** | 84.5% | 81.6% |
+
+84.5% against an oracle of 84.7%, from 76.5% for the classic decoder alone. The
+separation is what makes it safe: the lowest Farnsworth reading is 5.98 and the
+highest normal reading is 3.69, so 4.5 sits in a gap of 2.29 that no file
+crosses despite that variance.
+
+Smoothing the measurement across windows was tried, since the variance looked
+like the obvious thing to attack. It widens the gap from 2.29 to 2.40. That is
+not worth carrying state for, and it is recorded here so it is not tried again.
+
 ### Measured again on twice the data
 
 The nine-file figures below were the basis for every decision here: the decoder
@@ -174,6 +206,38 @@ emits a character at a known frame, so anything far enough behind the live edge
 will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
+
+### The threshold, checked the way the station runs
+
+The decoder choice was tuned on whole-file decodes, and the station streams. Once
+the model started accumulating, that gap was worth closing: the quantity the
+threshold tests is measured on a twelve-second window, not on a whole recording,
+and those are not the same number.
+
+    file            whole-file    streaming
+    260107_05WPM       16.55         7.00
+    260204_05WPM       16.67        15.59
+    260107_10WPM        6.11         5.98
+
+A window often does not contain the long gaps, so streaming reads lower and
+varies far more -- the 5 wpm files swing with a standard deviation of 4 to 6
+between windows, where every normal-speed file sits under 0.25.
+
+The threshold survives anyway, and the sweep run under streaming picks the same
+answer:
+
+| T | 2.5 | 3.0 | 4.0 | **4.5** | 5.0 | 6.0 |
+|---|---|---|---|---|---|---|
+| mean | 84.0% | 84.0% | 84.5% | **84.5%** | 84.5% | 81.6% |
+
+84.5% against an oracle of 84.7%, from 76.5% for the classic decoder alone. The
+separation is what makes it safe: the lowest Farnsworth reading is 5.98 and the
+highest normal reading is 3.69, so 4.5 sits in a gap of 2.29 that no file
+crosses despite that variance.
+
+Smoothing the measurement across windows was tried, since the variance looked
+like the obvious thing to attack. It widens the gap from 2.29 to 2.40. That is
+not worth carrying state for, and it is recorded here so it is not tried again.
 
 ### Measured again on twice the data
 
