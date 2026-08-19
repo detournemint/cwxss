@@ -128,6 +128,29 @@ def rbn_pass(a, model, log):
     return kept
 
 
+def radio_answers():
+    """Is there a radio on the other end of rigctld?
+
+    rigctld happily runs with the radio switched off and answers every command
+    with nothing at all, so "the daemon is up" says nothing about whether the
+    station is. A scheduled harvest that does not check this takes the decoder
+    offline for an hour, tunes a radio that is not listening, records the noise
+    floor of a disconnected sound card and restores a frequency it never read.
+    """
+    f = rig("f")
+    if not f or not f.strip():
+        return False, "no answer from the radio (is it switched on?)"
+    if f.strip().startswith("RPRT"):
+        return False, "rigctld says %s" % f.strip()
+    try:
+        hz = int(f.strip())
+    except ValueError:
+        return False, "rigctld gave %r for the frequency" % f.strip()[:40]
+    if hz <= 0:
+        return False, "the radio reports 0 Hz"
+    return True, "%.4f MHz" % (hz / 1e6)
+
+
 def check_receiver(log, probe_hz=7030000):
     """Is the front end actually switched on?
 
@@ -271,8 +294,13 @@ async def main():
     model = neural.NeuralDecoder(a.model)
     log(f"harvest starting: bands {a.bands}, {a.minutes} min, "
         f"model {'loaded' if model.available else model.error}")
+    ok, why = radio_answers()
+    if not ok:
+        log(f"  {why} -- nothing to harvest, stopping now rather than "
+            f"holding the audio device for {a.minutes} minutes")
+        return 2
     before = rig("f"), rig("m")
-    log(f"  restoring to {before} when done")
+    log(f"  radio present on {why}; restoring to {before} when done")
 
     known = set(SEGMENTS) | set(CHANNELS)
     bands = [b.strip() for b in a.bands.split(",") if b.strip() in known]
@@ -366,4 +394,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()) or 0)

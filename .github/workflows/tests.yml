@@ -1,0 +1,60 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          # numpy and aiohttp are what the station needs. onnxruntime is what
+          # makes the model run; without it the neural tests fall back to the
+          # classic decoder rather than failing, which is worth knowing.
+          python3 -m pip install --quiet numpy aiohttp onnxruntime
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq chromium-browser \
+            || echo "no chromium; the interface tests will say so and skip"
+      - name: Run tests
+        run: python3 tests/run.py
+      - name: Check the setup script parses
+        run: bash -n setup.sh
+      - name: The shipped model must load
+        run: |
+          python3 - <<'PY'
+          import sys; sys.path.insert(0, "cwxss")
+          import neural
+          n = neural.NeuralDecoder("models/cw.onnx")
+          # The model is committed precisely so a clone can decode without
+          # training one. If it stops loading, a fresh install is silently
+          # useless and every decode falls back to the classic path.
+          assert n.available, "models/cw.onnx did not load: %s" % n.error
+          print("model loads:", n.error or "ok")
+          PY
+      - name: Decode a known recording end to end
+        run: |
+          python3 - <<'PY'
+          import sys, wave; sys.path.insert(0, "cwxss")
+          import numpy as np, classic, dsp, neural
+          # A real off-air capture, committed with the repository. This is the
+          # only test here that exercises the whole chain on real audio.
+          w = wave.open("data/live/cw-20260818-042217.wav", "rb")
+          a = np.frombuffer(w.readframes(w.getnframes()),
+                            dtype=np.int16).astype(np.float32) / 32768.0
+          pitch, _ = dsp.find_pitch(a, w.getframerate())
+          assert pitch, "no tone found in a recording known to contain one"
+          env = dsp.envelope(a, pitch, w.getframerate(),
+                             bandwidth=dsp.cw_bandwidth(20))
+          norm, _, _ = dsp.normalise(env)
+          text, info = classic.decode(norm)
+          assert len(text.strip()) > 20, "decoded almost nothing: %r" % text[:40]
+          print("pitch %.0f Hz, %s wpm, %d chars" %
+                (pitch, info.get("wpm"), len(text)))
+          PY
