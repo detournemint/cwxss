@@ -54,6 +54,36 @@ Nine files, 5 to 40 wpm. ARRL publishes no archive for 25 or 35 wpm.
 | 40 wpm | **87.7%** | 80.4% |
 | **mean** | **68.6%** | **70.9%** |
 
+### Measured again on twice the data
+
+The nine-file figures below were the basis for every decision here: the decoder
+choice, its threshold, and two models promoted or rejected. Nine files is not
+many, and two of them carried the whole benefit of the choice, so the set was
+doubled with a second date at every speed.
+
+| | 9 files | 17 files |
+|---|---|---|
+| classic | 68.6% | 68.5% |
+| the model | 70.9% | 70.5% |
+| **chosen** | **74.3%** | **74.0%** |
+| oracle | 74.3% | 74.2% |
+
+Nothing moved by more than half a point, which is the useful result: the
+conclusions were not an artefact of a small sample.
+
+The gap-stretch measurement turns out to be strikingly reproducible between
+independent recordings at the same speed -- 16.55 against 16.67 at 5 wpm, 6.11
+against 6.10 at 10 wpm, 2.55 against 2.55 at 15 wpm, 2.02 against 2.02 at 40.
+That is what makes a fixed threshold defensible, and it was not evident from one
+recording per speed.
+
+The sweep is flat from 4.0 to 6.0 on the wider set, where it was flat from 4.0
+to 6.0 on the narrower one. The shipped 4.5 sits in the middle of that.
+
+Both 7.5 wpm transcripts are unreadable, from different dates, so that is
+something systematic about how ARRL publishes that speed rather than one bad
+download.
+
 ### Choosing between them
 
 Neither decoder wins outright. The classic one is ahead on every file sent at
@@ -92,6 +122,36 @@ decoder is ahead by 2 to 9 points.
 
 That argues for running both and choosing by measured regularity, rather than
 replacing one with the other -- which is now what happens.
+
+### Measured again on twice the data
+
+The nine-file figures below were the basis for every decision here: the decoder
+choice, its threshold, and two models promoted or rejected. Nine files is not
+many, and two of them carried the whole benefit of the choice, so the set was
+doubled with a second date at every speed.
+
+| | 9 files | 17 files |
+|---|---|---|
+| classic | 68.6% | 68.5% |
+| the model | 70.9% | 70.5% |
+| **chosen** | **74.3%** | **74.0%** |
+| oracle | 74.3% | 74.2% |
+
+Nothing moved by more than half a point, which is the useful result: the
+conclusions were not an artefact of a small sample.
+
+The gap-stretch measurement turns out to be strikingly reproducible between
+independent recordings at the same speed -- 16.55 against 16.67 at 5 wpm, 6.11
+against 6.10 at 10 wpm, 2.55 against 2.55 at 15 wpm, 2.02 against 2.02 at 40.
+That is what makes a fixed threshold defensible, and it was not evident from one
+recording per speed.
+
+The sweep is flat from 4.0 to 6.0 on the wider set, where it was flat from 4.0
+to 6.0 on the narrower one. The shipped 4.5 sits in the middle of that.
+
+Both 7.5 wpm transcripts are unreadable, from different dates, so that is
+something systematic about how ARRL publishes that speed rather than one bad
+download.
 
 ### Choosing between them
 
