@@ -84,7 +84,19 @@ window.WebSocket = FakeWS;
 # Runs after everything has settled: drives events and reports.
 PROBE = r"""
 <script>
-setTimeout(() => {
+// Wait for the page to actually have content rather than betting on a delay.
+// A fixed timeout is a bet on machine speed, and a slow CI box loses it: the
+// DOM gets dumped before the timer fires and a working page looks broken.
+function whenReady(go, tries){
+  // Wait for a decode to have actually rendered. #text exists in the static
+  // page and window.__sent is created by the stub, so testing for those fires
+  // before the scripted conversation is delivered and every transcript check
+  // reads an empty pane.
+  if (document.querySelector("#text .blk")) return go();
+  if (tries <= 0) return go();
+  setTimeout(() => whenReady(go, tries - 1), 50);
+}
+whenReady(() => {
   const r = {};
   const $ = s => document.querySelector(s);
   const click = el => el && el.dispatchEvent(
@@ -154,7 +166,7 @@ setTimeout(() => {
   r.stop_button_exists = !!$("#stop-btn");
   r.clear_button_exists = !!$("#clear-btn");
   document.title = "RESULT " + JSON.stringify(r);
-}, 900);
+}, 60);
 </script>
 """
 
@@ -177,7 +189,7 @@ class Interface(unittest.TestCase):
         try:
             out = subprocess.run(
                 [CHROME, "--headless", "--disable-gpu", "--no-sandbox",
-                 "--virtual-time-budget=6000", "--dump-dom", f"file://{path}"],
+                 "--virtual-time-budget=30000", "--dump-dom", f"file://{path}"],
                 cwd=ROOT, capture_output=True, text=True, timeout=120)
         finally:
             Path(path).unlink(missing_ok=True)
