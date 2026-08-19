@@ -183,9 +183,17 @@ class Interface(unittest.TestCase):
             Path(path).unlink(missing_ok=True)
         m = re.search(r"RESULT (\{.*?\})", out.stdout or "")
         if not m:
+            # A browser that ran returns the rendered DOM whether or not the
+            # probe fired; one that could not start returns nothing. Without
+            # this split, a CI box with an unusable chromium reports a broken
+            # interface.
+            if "<html" not in (out.stdout or "").lower():
+                raise unittest.SkipTest(
+                    "chromium is installed but produced no DOM (exit %s): %s"
+                    % (out.returncode, (out.stderr or "").strip()[-200:]))
             raise AssertionError(
-                "the page produced no result -- it probably failed to render. "
-                + (out.stderr or "")[-400:])
+                "the page rendered but the probe never ran -- a script error "
+                "on load. stderr: " + (out.stderr or "").strip()[-300:])
         cls.results = json.loads(m.group(1))
 
     def check(self, key):
