@@ -90,6 +90,12 @@ class StreamDecoder:
         # not, so showing both lets the operator see which to believe.
         self.net = neural.NeuralDecoder(model)
         self.neural_text = ""
+        # What the model has said about audio that has since aged past the live
+        # edge. The window view alone shows the last twelve seconds and no
+        # more, so over a long transmission the operator sees the model
+        # forgetting everything it just read.
+        self.neural_committed = ""
+        self.neural_read_to = 0
         self.neural_conf = 0.0
         # Which decoder to believe, and why. Measured on nine ARRL recordings:
         # the model wins where the gaps are stretched and the classic decoder
@@ -231,7 +237,22 @@ class StreamDecoder:
         # committing, and re-reading is cheap enough not to need one.
         if self.net.available and not self.quiet and self.env.size > 100:
             norm, _, _ = dsp.normalise(self.env)
-            self.neural_text, self.neural_conf = self.net.decode_scored(norm)
+            timed, self.neural_conf = self.net.decode_timed(norm)
+            self.neural_text = "".join(c for c, _ in timed)
+            # Commit on the same rule as the classic decoder: anything far
+            # enough behind the live edge will not be re-read differently, so
+            # it can be kept. Everything nearer the edge is left to be read
+            # again next window, when there is more of it.
+            edge = (self.frames_dropped + norm.size
+                    - int(COMMIT_LAG_S * self.frame_rate))
+            margin = max(2.0, (self.info.get("dit") or 6) * 0.5)
+            aged = [(c, self.frames_dropped + pos) for c, pos in timed]
+            fresh = [c for c, at in aged
+                     if at <= edge and at > self.neural_read_to + margin]
+            if fresh:
+                self.neural_read_to = max(at for _, at in aged if at <= edge)
+                self.neural_committed = (self.neural_committed
+                                         + "".join(fresh))[-4000:]
             level = classic.threshold(norm)
             seq = [r for r in classic.runs(norm, level) if r[1] >= 2]
             self.stretch = classic.gap_stretch(seq, self.info.get("dit"))
@@ -253,11 +274,13 @@ class StreamDecoder:
             "quiet": self.quiet,
             "bandwidth": round(self.bandwidth),
             "neural": self.neural_text,
+            "neural_all": self.neural_committed[-2000:],
             "neural_conf": round(self.neural_conf, 2),
             "neural_ok": self.net.available,
             "neural_error": self.net.error,
             "stretch": round(self.stretch, 1),
             "prefer": self.prefer,
-            "best": (self.neural_text if self.prefer == "neural" and self.neural_text
+            "best": (self.neural_committed[-2000:]
+                     if self.prefer == "neural" and self.neural_committed
                      else self.committed[-2000:]),
         }

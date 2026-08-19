@@ -72,6 +72,47 @@ class NeuralDecoder:
         text, _ = self.decode_scored(env, min_confidence)
         return text
 
+    def decode_timed(self, env, min_confidence=MIN_CONFIDENCE):
+        """Characters with the frame each was emitted at, and mean confidence.
+
+        The text alone is enough to show the last window, but not to accumulate
+        across windows: the model re-reads the whole window every time, so
+        appending its output would repeat everything, and appending nothing
+        means the operator only ever sees the last twelve seconds. Knowing
+        where in the window each character sits allows the same rule the
+        classic decoder uses -- commit what has aged past the live edge and
+        leave the rest to be re-read.
+        """
+        if not self.available or env is None or len(env) < 40:
+            return [], 0.0
+        x = np.asarray(env, dtype=np.float32)[None]
+        try:
+            logprobs = self.sess.run(None, {"envelope": x})[0][0]
+        except Exception as e:
+            self.error = f"{type(e).__name__}"
+            return [], 0.0
+        best = logprobs.argmax(axis=-1)
+        conf = np.exp(logprobs.max(axis=-1))
+        # The network downsamples, so a frame of output covers several frames
+        # of envelope. Scale back so positions are comparable with everything
+        # else, which counts in envelope frames.
+        stride = len(env) / float(len(best)) if len(best) else 1.0
+        out, scores, prev = [], [], None
+        for i, (k, c) in enumerate(zip(best, conf)):
+            k = int(k)
+            if k != prev and k != BLANK:
+                ch = INV.get(k, "")
+                if ch:
+                    out.append((ch, int(i * stride)))
+                    scores.append(float(c))
+            prev = k
+        if not out:
+            return [], 0.0
+        mean_conf = float(np.mean(scores))
+        if mean_conf < min_confidence:
+            return [], mean_conf
+        return out, mean_conf
+
     def decode_scored(self, env, min_confidence=MIN_CONFIDENCE):
         """Text and mean confidence, 0..1."""
         if not self.available or env is None or len(env) < 40:

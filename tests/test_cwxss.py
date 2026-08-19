@@ -16,7 +16,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "cwxss"))
 
-import classic, config, dsp, guess, lexicon, morse, qsolog, rbn, score  # noqa: E402
+import classic, config, dsp, guess, lexicon, morse, neural, qsolog  # noqa: E402
+import rbn, score                                                          # noqa: E402
 import selftrain                                                            # noqa: E402
 import stream, synth                                                       # noqa: E402
 
@@ -255,6 +256,61 @@ class DecoderChoice(unittest.TestCase):
     def test_no_gaps_is_not_a_stretch(self):
         self.assertEqual(classic.gap_stretch([], 10), 0.0)
         self.assertEqual(classic.gap_stretch([(True, 5)], 0), 0.0)
+
+
+class NeuralAccumulation(unittest.TestCase):
+    """The model has to remember what it read, not just the last window."""
+
+    def stream(self, text="CQ POTA DE K6XSS K TEST DE W1AW QRZ", wpm=18):
+        a = synth.render(text, wpm=wpm, pitch=640, snr_db=20, seed=6)
+        d = stream.StreamDecoder(model="models/cw.onnx")
+        n = int(0.5 * dsp.DEFAULT_RATE)
+        for i in range(0, a.size - n, n):
+            d.feed(a[i:i + n])
+            d.state()
+        return d
+
+    def test_timed_decode_agrees_with_plain_decode(self):
+        """The positions are extra information, not a different reading."""
+        net = neural.NeuralDecoder("models/cw.onnx")
+        if not net.available:
+            self.skipTest(net.error)
+        a = synth.render("CQ DE K6XSS K", wpm=20, pitch=640, snr_db=20, seed=3)
+        env, _, _ = dsp.normalise(
+            dsp.envelope(a, 640, bandwidth=dsp.cw_bandwidth(20)))
+        timed, _ = net.decode_timed(env)
+        self.assertEqual("".join(c for c, _ in timed), net.decode(env))
+
+    def test_positions_land_inside_the_window(self):
+        net = neural.NeuralDecoder("models/cw.onnx")
+        if not net.available:
+            self.skipTest(net.error)
+        a = synth.render("CQ DE K6XSS K", wpm=20, pitch=640, snr_db=20, seed=3)
+        env, _, _ = dsp.normalise(
+            dsp.envelope(a, 640, bandwidth=dsp.cw_bandwidth(20)))
+        timed, _ = net.decode_timed(env)
+        self.assertTrue(timed)
+        for _, pos in timed:
+            self.assertGreaterEqual(pos, 0)
+            self.assertLess(pos, len(env))
+
+    def test_the_model_keeps_more_than_the_last_window(self):
+        """Measured over seventeen ARRL recordings, showing only the current
+        window scored 39.5% against the transcript and accumulating scored
+        82.2%. The model was not reading badly; it was forgetting."""
+        d = self.stream()
+        net = neural.NeuralDecoder("models/cw.onnx")
+        if not net.available:
+            self.skipTest(net.error)
+        self.assertGreaterEqual(len(d.neural_committed), len(d.neural_text))
+
+    def test_committing_does_not_repeat_the_window(self):
+        """The model re-reads the whole window every time. Appending its
+        output would say everything several times over."""
+        d = self.stream()
+        if not d.neural_committed:
+            self.skipTest("model produced nothing")
+        self.assertLess(d.neural_committed.count("K6XSS"), 4)
 
 
 class SignalFinding(unittest.TestCase):

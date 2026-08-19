@@ -54,6 +54,32 @@ Nine files, 5 to 40 wpm. ARRL publishes no archive for 25 or 35 wpm.
 | 40 wpm | **87.7%** | 80.4% |
 | **mean** | **68.6%** | **70.9%** |
 
+### Streaming, which is what an operator actually sees
+
+The tables above decode a whole recording in one pass. The station does not: it
+reads a sliding twelve-second window, and the two decoders behaved very
+differently in that setting. The classic decoder commits text as it ages past
+the live edge and accumulates. The model re-read the window each time and showed
+only that, so on a two-minute transmission the operator saw it forget everything
+it had just read.
+
+Scored against the full transcript over seventeen ARRL recordings:
+
+| | streaming score |
+|---|---|
+| classic, accumulated | 76.5% |
+| model, last window only | 39.5% |
+| **model, accumulated** | **82.2%** |
+
+The model was never reading badly. It was forgetting, and every comparison
+between the two in live use was measuring that rather than decode quality.
+
+Accumulating uses the same rule the classic decoder already used: the network
+emits a character at a known frame, so anything far enough behind the live edge
+will not be re-read differently and can be kept. It helps most exactly where the
+model was already strongest -- the heavily Farnsworth-spaced files go from 33%
+to 79% and from 19% to 85%.
+
 ### Measured again on twice the data
 
 The nine-file figures below were the basis for every decision here: the decoder
@@ -122,6 +148,32 @@ decoder is ahead by 2 to 9 points.
 
 That argues for running both and choosing by measured regularity, rather than
 replacing one with the other -- which is now what happens.
+
+### Streaming, which is what an operator actually sees
+
+The tables above decode a whole recording in one pass. The station does not: it
+reads a sliding twelve-second window, and the two decoders behaved very
+differently in that setting. The classic decoder commits text as it ages past
+the live edge and accumulates. The model re-read the window each time and showed
+only that, so on a two-minute transmission the operator saw it forget everything
+it had just read.
+
+Scored against the full transcript over seventeen ARRL recordings:
+
+| | streaming score |
+|---|---|
+| classic, accumulated | 76.5% |
+| model, last window only | 39.5% |
+| **model, accumulated** | **82.2%** |
+
+The model was never reading badly. It was forgetting, and every comparison
+between the two in live use was measuring that rather than decode quality.
+
+Accumulating uses the same rule the classic decoder already used: the network
+emits a character at a known frame, so anything far enough behind the live edge
+will not be re-read differently and can be kept. It helps most exactly where the
+model was already strongest -- the heavily Farnsworth-spaced files go from 33%
+to 79% and from 19% to 85%.
 
 ### Measured again on twice the data
 
