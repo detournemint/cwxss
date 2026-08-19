@@ -128,7 +128,7 @@ def rbn_pass(a, model, log):
     return kept
 
 
-def check_receiver(log):
+def check_receiver(log, probe_hz=7030000):
     """Is the front end actually switched on?
 
     A power cycle resets the preamp on some rigs, and on the higher bands that
@@ -140,7 +140,21 @@ def check_receiver(log):
     Comparing the noise floor with the preamp off and on says whether an
     antenna is connected as well: with no antenna the preamp lifts almost
     nothing.
+
+    It has to be measured somewhere with noise to lift, which means a low band.
+    Atmospheric noise dominates on 40m and the receiver's own floor dominates
+    on 15m, so the same working antenna measures very differently depending on
+    where the dial happens to be sitting:
+
+        3.5 MHz  +42 dB      14.0 MHz  +33 dB
+        7.0 MHz  +45 dB      21.0 MHz   +1 dB
+       10.1 MHz  +43 dB      28.0 MHz  +21 dB
+
+    An earlier version measured wherever the previous run had left the radio,
+    found it on 15m in the evening, and announced that the antenna was
+    disconnected. It was not; there was simply nothing arriving to amplify.
     """
+    where = rig("f")
     def floor():
         vals = []
         for _ in range(3):
@@ -152,10 +166,13 @@ def check_receiver(log):
             time.sleep(0.6)
         return max(vals) if vals else None
 
+    rig(f"F {probe_hz}"); time.sleep(0.8)
     rig("L PREAMP 0"); time.sleep(1.5)
     off = floor()
     rig("L PREAMP 20"); time.sleep(1.5)
     on = floor()
+    if where:
+        rig(f"F {where}")
     if off is None or on is None:
         log("  receiver check: no S-meter reading")
         return
@@ -163,8 +180,9 @@ def check_receiver(log):
     log(f"  receiver: noise floor {off} dB without preamp, {on} dB with it "
         f"({lift:+d} dB)")
     if lift < 6:
-        log("  WARNING: the preamp barely changes the noise floor. That usually "
-            "means no antenna is connected.")
+        log(f"  WARNING: at {probe_hz/1e6:.3f} MHz the preamp barely changes "
+            "the noise floor. On a low band that means no antenna is "
+            "connected.")
     else:
         log("  antenna is connected; leaving the preamp on")
 
@@ -256,7 +274,15 @@ async def main():
     before = rig("f"), rig("m")
     log(f"  restoring to {before} when done")
 
-    check_receiver(log)
+    known = set(SEGMENTS) | set(CHANNELS)
+    bands = [b.strip() for b in a.bands.split(",") if b.strip() in known]
+
+    # Probe on the lowest band being swept: that is where atmospheric noise is
+    # strongest and a dead antenna is most obvious. In --rbn mode there are no
+    # bands to sweep, so fall back to 40m, which always has noise.
+    _lows = [SEGMENTS[b][0] for b in bands if b in SEGMENTS] + \
+            [min(CHANNELS[b]) for b in bands if b in CHANNELS]
+    check_receiver(log, probe_hz=min(_lows) if _lows else 7030000)
 
     end = time.time() + a.minutes * 60
     kept = 0
@@ -275,8 +301,6 @@ async def main():
                     rig(f"M {parts[0]} {parts[1]}")
             log(f"harvest done: {kept} recordings kept")
         return
-    known = set(SEGMENTS) | set(CHANNELS)
-    bands = [b.strip() for b in a.bands.split(",") if b.strip() in known]
     try:
         while time.time() < end:
             for band in bands:
