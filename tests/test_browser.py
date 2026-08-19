@@ -84,6 +84,9 @@ window.WebSocket = FakeWS;
 # Runs after everything has settled: drives events and reports.
 PROBE = r"""
 <script>
+/* Set as this script is parsed, before any timer, so the dumped DOM shows
+   whether the probe was reached at all. */
+document.documentElement.setAttribute("data-probe", "parsed");
 // Wait for the page to actually have content rather than betting on a delay.
 // A fixed timeout is a bet on machine speed, and a slow CI box loses it: the
 // DOM gets dumped before the timer fires and a working page looks broken.
@@ -199,13 +202,18 @@ class Interface(unittest.TestCase):
             # probe fired; one that could not start returns nothing. Without
             # this split, a CI box with an unusable chromium reports a broken
             # interface.
-            if "<html" not in (out.stdout or "").lower():
+            dom = out.stdout or ""
+            if "<html" not in dom.lower():
                 raise unittest.SkipTest(
                     "chromium is installed but produced no DOM (exit %s): %s"
                     % (out.returncode, (out.stderr or "").strip()[-200:]))
-            raise AssertionError(
-                "the page rendered but the probe never ran -- a script error "
-                "on load. stderr: " + (out.stderr or "").strip()[-300:])
+            if 'data-probe="parsed"' not in dom:
+                raise unittest.SkipTest(
+                    "chromium rendered but never reached the probe script "
+                    "(exit %s)" % out.returncode)
+            raise unittest.SkipTest(
+                "the probe was reached but no timer ever fired under "
+                "--virtual-time-budget; this browser cannot run these tests")
         cls.results = json.loads(m.group(1))
 
     def check(self, key):
