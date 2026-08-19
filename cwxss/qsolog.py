@@ -18,7 +18,13 @@ BANDS = [(1800, 2000, "160m"), (3500, 4000, "80m"), (5250, 5450, "60m"),
          (7000, 7300, "40m"), (10100, 10150, "30m"), (14000, 14350, "20m"),
          (18068, 18168, "17m"), (21000, 21450, "15m"), (24890, 24990, "12m"),
          (28000, 29700, "10m"), (50000, 54000, "6m"), (144000, 148000, "2m")]
-CALL_RE = re.compile(r"^[A-Z0-9]{1,3}\d[A-Z]{1,4}(/[A-Z0-9]{1,4})?$")
+# A callsign prefix always contains a letter. The old pattern allowed any
+# alphanumerics before the digit, so "21C" validated -- and "SUNNY 21C" is a
+# temperature that appears in real ragchew CW, which auto-logging duly offered
+# to file as a contact. Every real prefix is one or two letters, a letter and a
+# digit (A9), or a digit and a letter (4X, 9A).
+CALL_RE = re.compile(
+    r"^(?:[A-Z]{1,2}|[A-Z]\d|\d[A-Z])\d[A-Z]{1,4}(/[A-Z0-9]{1,4})?$")
 
 
 # POTA references are a prefix, a dash and four or five digits: K-1234 in the
@@ -28,7 +34,11 @@ RST = re.compile(r"\b([1-5][1-9NA][1-9NA])\b")
 STATE = re.compile(r"\b(A[KLRZ]|C[AOT]|D[CE]|FL|GA|HI|I[ADLN]|K[SY]|LA|"
                    r"M[ADEINOST]|N[CDEHJMVY]|O[HKR]|PA|RI|S[CD]|T[NX]|UT|"
                    r"V[AT]|W[AIVY])\b")
-CALL = re.compile(r"\b([A-Z0-9]{1,3}\d[A-Z]{1,4}(?:/[A-Z0-9]{1,3})?)\b")
+# The same rule as CALL_RE, for finding callsigns inside a line rather than
+# validating one on its own. Keeping two different notions of what a callsign
+# looks like is how "21C" got logged.
+CALL = re.compile(
+    r"\b((?:[A-Z]{1,2}|[A-Z]\d|\d[A-Z])\d[A-Z]{1,4}(?:/[A-Z0-9]{1,4})?)\b")
 
 
 def read_exchange(text, my_call="", their_call=""):

@@ -475,6 +475,20 @@ class AutoLog(unittest.TestCase):
     def read(self, text, mine="K6XSS"):
         return qsolog.read_exchange(text, my_call=mine)
 
+    def test_a_temperature_is_not_a_callsign(self):
+        """Found by running auto-log over a real recording: a ragchew about the
+        weather -- "WARM DAY ES SUNNY 21C" -- offered 21C as the station
+        worked. Every callsign prefix contains a letter; 21C has none."""
+        self.assertFalse(qsolog.valid_call("21C"))
+        self.assertEqual(
+            self.read("HR BOB WARM DAY ES SUNNY 21C ES 73")["call"], "")
+
+    def test_unusual_but_real_prefixes_still_pass(self):
+        """Tightening the rule must not throw out the callsigns that made the
+        loose version tempting: a digit-first prefix is perfectly ordinary."""
+        for c in ("4X4AB", "9A2V", "W1AW/7", "VE7ABC", "KH6XYZ"):
+            self.assertTrue(qsolog.valid_call(c), c)
+
     def test_a_clean_exchange(self):
         r = self.read("K6XSS DE N0ABC N0ABC 579 MN TU 73")
         self.assertEqual(r["call"], "N0ABC")
