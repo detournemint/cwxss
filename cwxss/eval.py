@@ -90,7 +90,8 @@ def main():
     if a.model and Path(a.model).exists():
         import torch
         import model as M
-        net = M.CWNet()
+        _st = torch.load(a.model, map_location="cpu")["state"]
+        net = M.CWNet(hidden=M.hidden_of(_st))
         net.load_state_dict(torch.load(a.model, map_location="cpu")["state"])
         net.eval()
 

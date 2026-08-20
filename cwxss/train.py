@@ -31,20 +31,27 @@ def make_clip(rng, wpm=None, snr=None, fist=None, text=None, pitch=None,
     pitch = pitch if pitch is not None else float(rng.uniform(400, 900))
     if fist is None:
         r = rng.random()
-        # A fifth of clips now use a hand as rough as the ones actually on
-        # the band. Measured off air, real sending spreads 0.248 to 0.412
-        # while the roughest fist here reached 0.244 -- the synthesiser's worst
-        # case was gentler than anything the station had recorded. That range
-        # is where the model falls from 95% to 38%, so it is worth training on.
+        # Training on hands as rough as the ones actually on the air was tried
+        # and reverted. Fist.on_air is kept because it is useful for measuring
+        # what a decoder does with real-world roughness, but a fifth of clips
+        # drawn from it cost more than it bought:
         #
-        # Unlike the Farnsworth widening, which was tried and reverted, this
-        # targets the common case rather than a rare tail. That is the argument
-        # for it; the evaluation is what decides.
-        fist = (synth.Fist.keyer(rng) if r < 0.20 else
-                synth.Fist.good_op(rng) if r < 0.50 else
-                synth.Fist.bug(rng) if r < 0.65 else
-                synth.Fist.rough_op(rng) if r < 0.80 else
-                synth.Fist.on_air(rng))
+        #     real ARRL benchmark   70.5% -> 66.7%
+        #     synthetic benchmark   97.7% -> 97.5%
+        #     the rough range       65.9% -> 67.7%
+        #
+        # Nearly four points of benchmark for under two points on the case it
+        # targeted, and negative at two of the five roughness levels.
+        #
+        # That is the second time widening this distribution has failed the
+        # same way. The Farnsworth attempt spent capacity on a rare tail and
+        # this one on the common case, and both traded more than they gained,
+        # which points at the 179,757 parameters rather than at how they are
+        # allocated. The next attempt should add capacity first.
+        fist = (synth.Fist.keyer(rng) if r < 0.25 else
+                synth.Fist.good_op(rng) if r < 0.60 else
+                synth.Fist.bug(rng) if r < 0.75 else
+                synth.Fist.rough_op(rng))
     # Farnsworth on a third of clips. Without it the model learns that a gap of
     # a given length always means the same thing, which is false for most of the
     # operators it will actually meet.
@@ -122,13 +129,15 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-3)
     ap.add_argument("--out", default="models/cw.pt")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--hidden", type=int, default=64,
+                    help="GRU width. Two attempts at widening the training distribution both traded more than they gained, which points at capacity. At one core, hidden=128 is 2.8x the parameters and still decodes 121x faster than real time.")
     a = ap.parse_args()
 
     torch.manual_seed(a.seed)
     torch.set_num_threads(max(1, (torch.get_num_threads() or 4)))
     rng = np.random.default_rng(a.seed)
 
-    net = M.CWNet()
+    net = M.CWNet(hidden=a.hidden)
     print(f"  {M.parameter_count(net):,} parameters")
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr,

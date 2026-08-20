@@ -72,3 +72,19 @@ class CWNet(nn.Module):
 
 def parameter_count(model):
     return sum(p.numel() for p in model.parameters())
+
+
+def hidden_of(state):
+    """Read the GRU width out of a checkpoint.
+
+    The width is a training choice and gets baked into the weights. Loading a
+    checkpoint into the wrong shape fails with a shape error if you are lucky
+    and silently mismatches if you are not, so it is read back rather than
+    assumed.
+    """
+    for key in ("rnn.weight_ih_l0", "gru.weight_ih_l0"):
+        w = state.get(key)
+        if w is not None:
+            return int(w.shape[0] // 3)      # GRU packs three gates per unit
+    raise KeyError("no recurrent layer in this checkpoint; cannot tell its "
+                   "width, and guessing loads the weights into the wrong shape")
