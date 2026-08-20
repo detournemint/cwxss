@@ -195,6 +195,12 @@ Things tried and rejected, so they are not tried again:
   were written against a heading that did not exist and silently did nothing,
   while the script reported success. The same bug had already cost a CSS rule
   earlier. Any scripted edit must assert that the text changed.
+- **Correcting the dit-length bias.** The dit is read 6% long on perfect keying
+  and 35% long on a rough fist, so reported speed runs up to 18% low. Not
+  corrected because the only available calibration is the synthesiser, which is
+  known not to match real sending, and because the gap thresholds and the
+  decoder-choice threshold were both tuned against the biased figure. Needs
+  real recordings with independently known speed.
 - **Smoothing the gap-stretch measurement.** Streamed, the measurement varies
   a lot on heavily Farnsworth-spaced sending -- standard deviation 4 to 6
   between windows, against under 0.25 for everything sent normally -- because a

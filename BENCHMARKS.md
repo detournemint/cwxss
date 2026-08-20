@@ -80,6 +80,40 @@ will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
 
+### What a rough hand does to the timing estimate
+
+The dit length is measured by splitting the key-down runs into two clusters. On
+a machine that works; on a hand it drifts, and always in the same direction.
+
+| jitter | dit error | reported speed at 20 wpm |
+|---|---|---|
+| 0.00 (machine) | 6% | 19.6 |
+| 0.22 | 21% | 18.4 |
+| 0.38 | 29% | 16.9 |
+| 0.55 | 35% | 16.3 |
+
+The dit is consistently read as longer than it is, so the speed is consistently
+reported lower -- nearly four words per minute low on a rough fist at 20 wpm.
+Six percent of it is there even on perfect keying, which is the envelope: a
+raised-cosine rise crosses the threshold slightly before the element nominally
+starts.
+
+It also connects to the previous section. Gap stretch is a ratio against the
+dit, so an overlong dit reads as a shorter stretch, which is part of why all
+four real recordings measured between 2.91 and 3.92 despite being ordinary
+ragchew sending.
+
+**Not corrected, deliberately.** Any correction would have to be calibrated
+against the synthesiser, and the section below establishes that the synthesiser
+does not represent real sending -- so the calibration would import exactly the
+error it was meant to remove. Worse, the gap thresholds and the decoder-choice
+threshold were both tuned against the biased figure, so changing it silently
+moves two constants that are known to be right. Four earlier attempts at this
+decoder's timing all had to be reverted.
+
+What it needs is ground truth from real signals: recordings where the sending
+speed is known independently. That is what the harvested corpus is for.
+
 ### How rough the air actually is
 
 The fist model is now load-bearing: the decoder choice, the training
@@ -280,6 +314,40 @@ emits a character at a known frame, so anything far enough behind the live edge
 will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
+
+### What a rough hand does to the timing estimate
+
+The dit length is measured by splitting the key-down runs into two clusters. On
+a machine that works; on a hand it drifts, and always in the same direction.
+
+| jitter | dit error | reported speed at 20 wpm |
+|---|---|---|
+| 0.00 (machine) | 6% | 19.6 |
+| 0.22 | 21% | 18.4 |
+| 0.38 | 29% | 16.9 |
+| 0.55 | 35% | 16.3 |
+
+The dit is consistently read as longer than it is, so the speed is consistently
+reported lower -- nearly four words per minute low on a rough fist at 20 wpm.
+Six percent of it is there even on perfect keying, which is the envelope: a
+raised-cosine rise crosses the threshold slightly before the element nominally
+starts.
+
+It also connects to the previous section. Gap stretch is a ratio against the
+dit, so an overlong dit reads as a shorter stretch, which is part of why all
+four real recordings measured between 2.91 and 3.92 despite being ordinary
+ragchew sending.
+
+**Not corrected, deliberately.** Any correction would have to be calibrated
+against the synthesiser, and the section below establishes that the synthesiser
+does not represent real sending -- so the calibration would import exactly the
+error it was meant to remove. Worse, the gap thresholds and the decoder-choice
+threshold were both tuned against the biased figure, so changing it silently
+moves two constants that are known to be right. Four earlier attempts at this
+decoder's timing all had to be reverted.
+
+What it needs is ground truth from real signals: recordings where the sending
+speed is known independently. That is what the harvested corpus is for.
 
 ### How rough the air actually is
 
