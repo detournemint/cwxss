@@ -44,6 +44,12 @@ GRACE_S = 4.0      # audio kept in hand while deciding whether it is a signal
 # the model is far ahead. Anywhere in 4 to 6 gives the same result on the nine
 # recordings this was measured on.
 STRETCH_PREFER_NEURAL = 4.5
+# Above this much spread in the key-down lengths the sending is a hand rather
+# than a machine, and the model is well ahead there. Every ARRL practice
+# recording sits below 0.08 and a bug or a rough fist above 0.15, so this
+# changes nothing that the benchmark measures and everything about the case it
+# cannot measure -- which is most of the air.
+SPREAD_PREFER_NEURAL = 0.12
 
 
 class StreamDecoder:
@@ -95,6 +101,7 @@ class StreamDecoder:
         # more, so over a long transmission the operator sees the model
         # forgetting everything it just read.
         self.neural_committed = ""
+        self.spread = 0.0
         self.neural_read_to = 0
         self.neural_conf = 0.0
         # Which decoder to believe, and why. Measured on nine ARRL recordings:
@@ -256,7 +263,11 @@ class StreamDecoder:
             level = classic.threshold(norm)
             seq = [r for r in classic.runs(norm, level) if r[1] >= 2]
             self.stretch = classic.gap_stretch(seq, self.info.get("dit"))
-            self.prefer = ("neural" if self.stretch >= STRETCH_PREFER_NEURAL
+            self.spread = classic.fist_spread(seq, self.info.get("dit"),
+                                              self.info.get("dah"))
+            self.prefer = ("neural"
+                           if (self.stretch >= STRETCH_PREFER_NEURAL
+                               or self.spread >= SPREAD_PREFER_NEURAL)
                            else "classic")
         toks, marks = guess.repair(self.committed[-600:])
         return {
@@ -279,6 +290,7 @@ class StreamDecoder:
             "neural_ok": self.net.available,
             "neural_error": self.net.error,
             "stretch": round(self.stretch, 1),
+            "spread": round(self.spread, 3),
             "prefer": self.prefer,
             "best": (self.neural_committed[-2000:]
                      if self.prefer == "neural" and self.neural_committed

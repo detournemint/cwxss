@@ -80,6 +80,41 @@ will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
 
+### What the benchmark cannot see
+
+Every ARRL practice recording is machine-sent, and the decoder choice was tuned
+entirely on them. Measuring the spread of the key-down lengths -- standard
+deviation over mean, on the runs that should all be dits -- says how far that
+is from the air:
+
+| | spread |
+|---|---|
+| ARRL practice files | 0.014 - 0.076 |
+| electronic keyer | 0.062 |
+| a careful operator | 0.078 |
+| a bug | 0.163 |
+| a rough fist | 0.231 |
+
+The benchmark contains nothing above 0.08. It cannot say anything about a hand
+on a key, which is most of what is on the air, and the model is far ahead there:
+
+| fist | old rule | with spread |
+|---|---|---|
+| keyer | 100.0% | 100.0% |
+| careful operator | 100.0% | 100.0% |
+| **bug** | 68.5% | **89.3%** |
+| **rough fist** | 65.2% | **95.9%** |
+
+The station now prefers the model when the sending is irregular as well as when
+it is heavily Farnsworth-spaced. The threshold at 0.12 sits above every
+recording in the benchmark, so this cannot change a single benchmark result --
+confirmed by re-running it -- and only affects sending more irregular than
+anything the benchmark contains.
+
+That is also the honest limit of it. The gain is measured on a synthesiser's
+idea of a bug and a rough fist. Four real off-air recordings is not enough to
+confirm it, and confirming it is what the harvested corpus is for.
+
 ### The threshold, checked the way the station runs
 
 The decoder choice was tuned on whole-file decodes, and the station streams. Once
@@ -206,6 +241,41 @@ emits a character at a known frame, so anything far enough behind the live edge
 will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
+
+### What the benchmark cannot see
+
+Every ARRL practice recording is machine-sent, and the decoder choice was tuned
+entirely on them. Measuring the spread of the key-down lengths -- standard
+deviation over mean, on the runs that should all be dits -- says how far that
+is from the air:
+
+| | spread |
+|---|---|
+| ARRL practice files | 0.014 - 0.076 |
+| electronic keyer | 0.062 |
+| a careful operator | 0.078 |
+| a bug | 0.163 |
+| a rough fist | 0.231 |
+
+The benchmark contains nothing above 0.08. It cannot say anything about a hand
+on a key, which is most of what is on the air, and the model is far ahead there:
+
+| fist | old rule | with spread |
+|---|---|---|
+| keyer | 100.0% | 100.0% |
+| careful operator | 100.0% | 100.0% |
+| **bug** | 68.5% | **89.3%** |
+| **rough fist** | 65.2% | **95.9%** |
+
+The station now prefers the model when the sending is irregular as well as when
+it is heavily Farnsworth-spaced. The threshold at 0.12 sits above every
+recording in the benchmark, so this cannot change a single benchmark result --
+confirmed by re-running it -- and only affects sending more irregular than
+anything the benchmark contains.
+
+That is also the honest limit of it. The gain is measured on a synthesiser's
+idea of a bug and a rough fist. Four real off-air recordings is not enough to
+confirm it, and confirming it is what the harvested corpus is for.
 
 ### The threshold, checked the way the station runs
 

@@ -486,6 +486,43 @@ class Sixty(unittest.TestCase):
         self.assertEqual(len(harvest.CHANNELS["60"]), 5)
 
 
+class FistSpread(unittest.TestCase):
+    """A machine and a hand send differently, and it can be measured."""
+
+    def spread_of(self, fist, wpm=20, snr=20, seed=5):
+        a = synth.render("CQ POTA DE K6XSS K TEST DE W1AW QRZ ES TU", wpm=wpm,
+                         pitch=640, snr_db=snr, fist=fist, seed=seed)
+        e, _, _ = dsp.normalise(
+            dsp.envelope(a, 640, bandwidth=dsp.cw_bandwidth(20)))
+        level = classic.threshold(e)
+        seq = [r for r in classic.runs(e, level) if r[1] >= 2]
+        dit, dah = classic.estimate_dit([n for on, n in seq if on])
+        return classic.fist_spread(seq, dit, dah)
+
+    def test_a_keyer_is_regular(self):
+        rng = np.random.default_rng(1)
+        self.assertLess(self.spread_of(synth.Fist.keyer(rng)),
+                        stream.SPREAD_PREFER_NEURAL)
+
+    def test_a_rough_fist_is_not(self):
+        rng = np.random.default_rng(1)
+        self.assertGreater(self.spread_of(synth.Fist.rough_op(rng)),
+                           stream.SPREAD_PREFER_NEURAL)
+
+    def test_the_threshold_clears_every_benchmark_recording(self):
+        """Every ARRL practice file measures between 0.014 and 0.076 because
+        they are machine-sent. The threshold sits above all of them, so adding
+        this signal cannot change a single benchmark result -- which is what
+        made it safe to add on evidence the benchmark cannot provide."""
+        self.assertGreater(stream.SPREAD_PREFER_NEURAL, 0.08)
+        self.assertLess(stream.SPREAD_PREFER_NEURAL, 0.15)
+
+    def test_too_few_elements_is_not_a_verdict(self):
+        self.assertEqual(classic.fist_spread([], 6, 18), 0.0)
+        self.assertEqual(classic.fist_spread([(True, 6)], 6, 18), 0.0)
+        self.assertEqual(classic.fist_spread([(True, 6)] * 20, None, None), 0.0)
+
+
 class Guessing(unittest.TestCase):
     def test_fills_a_single_missing_character(self):
         for token, want in (("R?GHT", "RIGHT"), ("SUN?Y", "SUNNY"),
