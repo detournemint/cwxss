@@ -80,6 +80,45 @@ will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
 
+### How rough the air actually is
+
+The fist model is now load-bearing: the decoder choice, the training
+distribution and last night's threshold all assume the synthesiser is a fair
+picture of a hand on a key. It is not, and the four off-air recordings say so.
+
+| | spread |
+|---|---|
+| ARRL practice files | 0.043 |
+| synthetic keyer | 0.053 |
+| synthetic careful operator | 0.082 |
+| synthetic bug | 0.166 |
+| synthetic rough fist | 0.228 |
+| **real off-air recordings** | **0.248 - 0.412** |
+
+The roughest sending the synthesiser could produce was gentler than the
+gentlest thing the station has recorded off the air. Noise does not account for
+it: the same fist measured from 30 dB down to 6 dB moves by about 0.02, while
+the gap here is 0.2.
+
+That range is exactly where both decoders come apart:
+
+| jitter | spread | classic | model |
+|---|---|---|---|
+| 0.22 | 0.244 | 77.8% | 94.7% |
+| 0.30 | 0.310 | 58.7% | 82.1% |
+| 0.38 | 0.351 | 51.7% | 66.2% |
+| 0.46 | 0.374 | 43.2% | 51.5% |
+| 0.55 | 0.407 | 36.0% | 38.2% |
+
+The model is trained to 0.244 and holds 95% there. Across the range real
+operators occupy it falls to 38%, and its lead over the timing rules goes from
+seventeen points to two.
+
+It does validate last night's change, though. All four recordings measure
+stretch between 2.91 and 3.92 -- below the 4.5 that would have preferred the
+model -- so before the spread signal was added, every real recording the station
+has would have been handed to the weaker decoder.
+
 ### What the benchmark cannot see
 
 Every ARRL practice recording is machine-sent, and the decoder choice was tuned
@@ -241,6 +280,45 @@ emits a character at a known frame, so anything far enough behind the live edge
 will not be re-read differently and can be kept. It helps most exactly where the
 model was already strongest -- the heavily Farnsworth-spaced files go from 33%
 to 79% and from 19% to 85%.
+
+### How rough the air actually is
+
+The fist model is now load-bearing: the decoder choice, the training
+distribution and last night's threshold all assume the synthesiser is a fair
+picture of a hand on a key. It is not, and the four off-air recordings say so.
+
+| | spread |
+|---|---|
+| ARRL practice files | 0.043 |
+| synthetic keyer | 0.053 |
+| synthetic careful operator | 0.082 |
+| synthetic bug | 0.166 |
+| synthetic rough fist | 0.228 |
+| **real off-air recordings** | **0.248 - 0.412** |
+
+The roughest sending the synthesiser could produce was gentler than the
+gentlest thing the station has recorded off the air. Noise does not account for
+it: the same fist measured from 30 dB down to 6 dB moves by about 0.02, while
+the gap here is 0.2.
+
+That range is exactly where both decoders come apart:
+
+| jitter | spread | classic | model |
+|---|---|---|---|
+| 0.22 | 0.244 | 77.8% | 94.7% |
+| 0.30 | 0.310 | 58.7% | 82.1% |
+| 0.38 | 0.351 | 51.7% | 66.2% |
+| 0.46 | 0.374 | 43.2% | 51.5% |
+| 0.55 | 0.407 | 36.0% | 38.2% |
+
+The model is trained to 0.244 and holds 95% there. Across the range real
+operators occupy it falls to 38%, and its lead over the timing rules goes from
+seventeen points to two.
+
+It does validate last night's change, though. All four recordings measure
+stretch between 2.91 and 3.92 -- below the 4.5 that would have preferred the
+model -- so before the spread signal was added, every real recording the station
+has would have been handed to the weaker decoder.
 
 ### What the benchmark cannot see
 

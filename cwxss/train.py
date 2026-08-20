@@ -31,10 +31,20 @@ def make_clip(rng, wpm=None, snr=None, fist=None, text=None, pitch=None,
     pitch = pitch if pitch is not None else float(rng.uniform(400, 900))
     if fist is None:
         r = rng.random()
-        fist = (synth.Fist.keyer(rng) if r < 0.25 else
-                synth.Fist.good_op(rng) if r < 0.60 else
-                synth.Fist.bug(rng) if r < 0.75 else
-                synth.Fist.rough_op(rng))
+        # A fifth of clips now use a hand as rough as the ones actually on
+        # the band. Measured off air, real sending spreads 0.248 to 0.412
+        # while the roughest fist here reached 0.244 -- the synthesiser's worst
+        # case was gentler than anything the station had recorded. That range
+        # is where the model falls from 95% to 38%, so it is worth training on.
+        #
+        # Unlike the Farnsworth widening, which was tried and reverted, this
+        # targets the common case rather than a rare tail. That is the argument
+        # for it; the evaluation is what decides.
+        fist = (synth.Fist.keyer(rng) if r < 0.20 else
+                synth.Fist.good_op(rng) if r < 0.50 else
+                synth.Fist.bug(rng) if r < 0.65 else
+                synth.Fist.rough_op(rng) if r < 0.80 else
+                synth.Fist.on_air(rng))
     # Farnsworth on a third of clips. Without it the model learns that a gap of
     # a given length always means the same thing, which is false for most of the
     # operators it will actually meet.

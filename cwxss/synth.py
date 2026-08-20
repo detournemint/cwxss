@@ -61,6 +61,31 @@ class Fist:
         return cls(jitter=0.22, dah_ratio=2.6, char_gap_scale=1.45,
                    word_gap_scale=1.3, weight=1.15, rng=rng)
 
+    @classmethod
+    def on_air(cls, rng=None):
+        """A hand as rough as the ones actually on the band.
+
+        Measured on off-air recordings, the spread of the key-down lengths runs
+        0.248 to 0.412. Every fist above tops out at 0.244, so the roughest
+        sending this synthesiser could produce was the *gentlest* thing the
+        station had so far recorded. Noise does not explain the difference: the
+        same fist measured from 30 dB down to 6 dB moves by about 0.02.
+
+        That gap matters because it is where both decoders fall apart. Across
+        0.24 to 0.41 the model drops from 95% to 38% and its lead over the
+        timing rules goes from seventeen points to two.
+
+        This is the modal case on the air, not a tail, which is what separates
+        it from the Farnsworth widening that was tried and reverted: that one
+        spent capacity on beginners' practice tapes, which are rare.
+        """
+        r = rng if rng is not None else _rng()
+        return cls(jitter=float(r.uniform(0.24, 0.50)),
+                   dah_ratio=float(r.uniform(2.4, 3.4)),
+                   char_gap_scale=float(r.uniform(1.1, 1.8)),
+                   word_gap_scale=float(r.uniform(1.0, 1.6)),
+                   weight=float(r.uniform(0.9, 1.3)), rng=r)
+
     def scale(self, on, units):
         """Length of one element, in dit units, as this operator would send it."""
         u = float(units)
